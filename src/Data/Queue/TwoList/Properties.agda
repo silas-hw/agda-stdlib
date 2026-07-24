@@ -52,4 +52,9 @@ size-enqueue a (mkQ (x ∷ front) back inv) = begin
   size (mkQ (x ∷ front) (a ∷ back) (λ n → ⊥-elim (¬Null n))) ≡⟨⟩
   length (x ∷ front) + length (a ∷ back)                     ≡⟨⟩
   length (x ∷ front) + suc (length back) ≡⟨ +-suc (length (x ∷ front)) (length back) ⟩
-  suc (length (x ∷ front) + length back)                     ∎
+  suc (length (x ∷ front) + length back) ∎
+
+-- trivial, but ensures empty works correctly
+size-empty : size (empty {a} {A}) ≡ 0
+size-empty = refl
+
