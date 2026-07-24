@@ -23,7 +23,7 @@ open import Data.Nat.Base using (ℕ; zero; suc; _+_)
 open import Data.Product using (_×_; _,_)
 open import Data.Queue.QueueSpec using (IsQueue)
 open import Data.SnocList.Base using (List<; toList>)
-open import Function.Base using (id)
+open import Function.Base using (id; const)
 open import Relation.Nullary using (¬_)
 
 private
@@ -31,6 +31,16 @@ private
     a b : Level
     A : Set a
     B : Set b
+
+  ¬Null : {a : A} {as : List A} → ¬ (Null (a ∷ as))
+  ¬Null (() Data.List.Relation.Unary.All.∷ n)
+
+  null-[] : ∀ {xs : List A} → Null xs → Null {A = A} []
+  null-[] = const []
+
+  -- mckinna seems to have a better idea but currently doesnt type check
+  null-∷ : ∀ {x} {xs ys : List A} → Null (x ∷ xs) → Null ys
+  null-∷ = λ x₁ → ⊥-elim (¬Null x₁)
 
 -- A Queue consists of a front (dequeue) and back (enqueue) list
 -- When enqueing (unless it is the first element), elements are cons'd
@@ -52,49 +62,32 @@ record Queue (A : Set a) : Set a where
 ------------------------------------------------------------------------
 -- Construction & Destruction
 
-empty : Queue A
-empty = mkQ [] [] id
+queue : List A → List A → Queue A
+queue []         ys = mkQ (reverse ys) [] null-[]
+queue xs@(_ ∷ _) ys = mkQ xs ys null-∷
 
--- NOTE: might not be needed. Could be inlined? Existing lemmas exist?
-private
-  ¬Null : {a : A} {as : List A} → ¬ (Null (a ∷ as))
-  ¬Null (() Data.List.Relation.Unary.All.∷ n)
+empty : Queue A
+empty = queue [] []
 
 enqueue : A → Queue A → Queue A
-enqueue x (mkQ [] back inv) = record
-  { front = x ∷ []
-  ; back  = back
-  ; inv   = λ _ → inv []
-  }
-enqueue x (mkQ front@(_ ∷ _) back _) = record
-  { front = front
-  ; back  = x ∷ back
-  ; inv   = λ n → ⊥-elim (¬Null n)
-  }
+enqueue x q with bs ← Queue.back q | Queue.front q
+... | []            = queue (x ∷ []) []
+... | front@(_ ∷ _) = queue front (x ∷ bs)
+
+dequeue : Queue A → Maybe (A × Queue A)
+dequeue q with Queue.front q
+... | []     = nothing
+... | x ∷ xs = just (x , queue xs (Queue.back q))
 
 -- Create a queue with a single element
 singleton : A → Queue A
 singleton x = enqueue x empty
 
-dequeue : Queue A → Maybe (A × Queue A)
-dequeue (mkQ [] [] inv) = nothing
-dequeue (mkQ [] (x ∷ back) inv) = ⊥-elim (¬Null (inv []))
-dequeue (mkQ (x ∷ []) back inv) = just (x , record
-  { front = reverse back
-  ; back  = []
-  ; inv   = λ _ → []
-  })
-dequeue (mkQ (x ∷ y ∷ front) back inv) = just (x , record
-  { front = y ∷ front
-  ; back  = back
-  ; inv   = λ n → ⊥-elim (¬Null n)
-  })
-
 ------------------------------------------------------------------------
 --- Basic Functions
 
 isEmpty : Queue A → Bool
-isEmpty (mkQ front back inv) = null front
+isEmpty q = null (Queue.front q)
 
 size : Queue A → ℕ
 size q = length (Queue.front q) + length (Queue.back q)
@@ -116,7 +109,7 @@ toList q = Queue.front q ++ (reverse (Queue.back q))
 -- of the list would be dequeued starting from its first element
 -- (i.e. the first element of the list becomes the last element of the queue)
 fromList : List A → Queue A
-fromList xs = mkQ xs [] λ _ → []
+fromList xs = queue xs []
 
 ------------------------------------------------------------------------
 --- TwoList Queue is a Queue

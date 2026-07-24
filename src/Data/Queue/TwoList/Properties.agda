@@ -45,8 +45,30 @@ toList-fromList xs@(_ ∷ _) = begin
   xs                            ∎
 
 -- enqueue increases size by 1
-size-enqueue : (a : A) (q : Queue A) → (size (enqueue a q)) ≡ (suc (size q))
-size-enqueue a (mkQ [] back inv) = refl
+-- feels uneccesarily complex for the empty front case?
+-- rewrite could make it cleaner, but are we trying to use that less?
+size-enqueue : (x : A) (q : Queue A) → (size (enqueue x q)) ≡ (suc (size q))
+size-enqueue {A = A} x q@(mkQ [] back inv) = begin
+  size (enqueue x (mkQ [] back inv)) ≡⟨⟩
+  size (queue (x ∷ []) [])           ≡⟨⟩
+  suc 0                              ≡⟨ cong suc (sym sizeq) ⟩
+  suc (size q)                       ∎
+  where
+    null[] : Null back → back ≡ []
+    null[] [] = refl
+    
+    back[] : back ≡ []
+    back[] = null[] (inv [])
+
+    sizeq : size q ≡ 0
+    sizeq = begin
+      size q                          ≡⟨⟩
+      length {A = A} [] + length back ≡⟨⟩
+      0 + length back                 ≡⟨⟩
+      length back                     ≡⟨ cong length back[] ⟩
+      length {A = A} []               ≡⟨⟩
+      0                               ∎
+     
 size-enqueue a (mkQ (x ∷ front) back inv) = begin
   size (enqueue a (mkQ (x ∷ front) back inv))                ≡⟨⟩
   size (mkQ (x ∷ front) (a ∷ back) (λ n → ⊥-elim (¬Null n))) ≡⟨⟩
