@@ -121,3 +121,9 @@ singleton = fromList ∘ List.[_]
 -- the order of dequeue
 _≈_ : ∀ {A : Set a} → Rel (Queue A) a
 q ≈ q' = (toList q) ≡ (toList q')
+
+------------------------------------------------------------------------
+-- Size
+
+size : Queue A → ℕ
+size = length ∘ toList

@@ -10,7 +10,7 @@ module Data.Queue.TwoList.Properties where
 
 open import Level using (Level)
 open import Data.List.Base using (List; _∷_; _∷ʳ_; _++_; length)
-open import Data.List.Properties using (++-identityʳ; length-++; length-reverse)
+open import Data.List.Properties using (++-identityʳ; length-++; length-reverse; ++-assoc)
 open import Data.List.Relation.Unary.All using (All; Null; [])
 open import Data.List.Relation.Unary.All.Properties using (++⁺; nullxs→xs≡[])
 open import Data.Nat.Base using (suc; _+_)
@@ -18,9 +18,11 @@ open import Data.Nat.Properties using (+-comm; +-suc; +-assoc)
 open import Data.Product.Base using (_×_; proj₁; proj₂)
 open import Data.Queue.QueueSpec using (RawQueue; IsQueue)
 open import Data.Queue.TwoList.Base
-open import Data.Queue.TwoList.Instances
 open import Data.SnocList.Base as SnocList using (List<; []; _<:_; toList>; fromList>; _<><_; _<>>_)
+  renaming (_++_ to _++<_)
 open import Data.SnocList.Properties
+  renaming (++-identityʳ to ++<-identityʳ; ++-identityˡ to ++<-identityˡ; ++-identity to ++<-identity)
+  hiding (length-++)
 open import Data.SnocList.Relation.Unary.All using (All<; Null<; []; _<:_)
 open import Data.SnocList.Relation.Unary.All.Properties using (all<>>; all<>)
 open import Function.Base using (_∘_)
@@ -33,7 +35,6 @@ open import Relation.Nullary using (¬_; False; contradiction)
 open import Relation.Unary using (Pred)
 
 open ≡-Reasoning
-open RawQueue {{...}} using (size)
 
 private
   variable
@@ -80,7 +81,6 @@ toList-fromList {q = q} {xs = xs} q≈xs = begin
   toList (fromList xs) ≡⟨ toList-fromList' xs ⟩
   xs                   ∎
   where
-    -- TODO: can probably cleanup a little
     toList-fromList' : ∀ (xs : List A) → toList (fromList xs) ≡ xs
     toList-fromList' xs = begin
       toList (fromList xs)                         ≡⟨⟩
@@ -109,6 +109,40 @@ toList-enqueue {q = mkQ [] back inv} {x} = begin
   x ∷ [] ++ []   ≡⟨ sym (cong (λ y → x ∷ y ++ []) (nullxs→xs≡[] (inv []))) ⟩
   x ∷ back ++ [] ∎
 toList-enqueue {q = mkQ (front <: x) back inv} = refl
+
+toList-dequeue  : ∀ {q : Queue A} → .{{i : False (empty? q)}} →
+                      let xr = dequeue q {{i}} in toList q ≡ toList (proj₁ xr) ∷ʳ proj₂ xr
+toList-dequeue {q = mkQ (xs <: x) [] inv} = begin
+  xs <>> (x ∷ [])                                          ≡⟨ cong (λ y → y <>> (x ∷ [])) (sym (++<-identityˡ xs)) ⟩
+  ([] ++< xs) <>> (x ∷ [])                                 ≡⟨ <>>-toList>++ {xs = ([] ++< xs)} ⟩
+  (toList> ([] ++< xs)) ++ (x ∷ [])                        ≡⟨ cong (λ y → y ++ (x ∷ [])) (toList>-distrib-++ {xs = []} {ys = xs}) ⟩
+  ([] ++ (toList> xs)) ++ (x ∷ [])                         ≡⟨ cong (λ y → (y ++ (toList> xs)) ++ (x ∷ [])) (sym (queue-back[] {xs = xs})) ⟩
+  ((Queue.back (queue xs [])) ++ (toList> xs)) ++ (x ∷ []) ≡⟨⟩
+  ((Queue.back (queue xs [])) ++ (xs <>> [])) ++ (x ∷ [])  ≡⟨ cong (λ y → ((Queue.back (queue xs [])) ++ (y <>> [])) ++ (x ∷ [])) (sym (queue-front {xs = xs})) ⟩
+  ((Queue.back (queue xs [])) ++ (Queue.front (queue xs []) <>> [])) ++ (x ∷ []) ∎
+
+-- either xs empty, so Queue.back ≡ [], or xs is not, so Queue.back ≡ y ∷ ys
+toList-dequeue {q = mkQ ([] <: x) (y ∷ ys) inv} = sym (begin
+   (([] <: y) <>< ys) <>> [] ++ x ∷ []         ≡⟨ cong (λ z → z ++ x ∷ []) (fish-and-chips ys ([] <: y) []) ⟩
+   ([] <: y) <>> ([] <>< ys) <>> [] ++ x ∷ []  ≡⟨⟩
+   [] <>> (y ∷ (([] <>< ys) <>> [] ++ x ∷ [])) ≡⟨⟩
+   (y ∷ (([] <>< ys) <>> [] ++ x ∷ []))        ≡⟨ cong (λ z → y ∷ (z ++ x ∷ [])) ([]<><xs<>>[]≡xs {xs = ys}) ⟩
+   y ∷ ys ++ x ∷ []                            ∎
+   )
+
+toList-dequeue {q = mkQ ((xs <: z) <: x) (y ∷ ys) inv} = begin
+  y ∷ ys ++ xs <>> (z ∷ x ∷ [])           ≡⟨⟩
+  y ∷ (ys ++ xs <>> (z ∷ x ∷ []))         ≡⟨ cong (λ w → y ∷ (ys ++ w)) (sym (++-identityʳ (xs <>> (z ∷ x ∷ [])))) ⟩
+  y ∷ (ys ++ xs <>> (z ∷ x ∷ []) ++ [])   ≡⟨ cong (λ w → y ∷ (ys ++ w)) (++<>> {xs = xs} {ys = []})⟩
+  y ∷ (ys ++ xs <>> (z ∷ []) ++ (x ∷ [])) ≡⟨ cong (λ w → y ∷ w) (sym (Data.List.Properties.++-assoc ys (xs <>> (z ∷ [])) (x ∷ []))) ⟩
+  y ∷ (ys ++ xs <>> (z ∷ [])) ++ x ∷ []   ∎
+
+  where
+    ++<>> : ∀ {x y} {xs : List< A} {ys : List A} → xs <>> (x ∷ y ∷ []) ++ ys ≡ (xs <>> (x ∷ [])) ++ (y ∷ ys)
+    ++<>> {x = x} {y} {xs} {ys} = begin
+      xs <>> (x ∷ y ∷ []) ++ ys ≡⟨⟩
+      xs <>> ((x ∷ []) ++ (y ∷ [])) ++ ys ≡⟨ sym (<>>++∷ {xs = xs} {ys = (x ∷ [])}) ⟩
+      xs <>> (x ∷ []) ++ y ∷ ys ∎
 
 ------------------------------------------------------------------------
 -- Properties relating to size
@@ -175,23 +209,3 @@ size-empty = refl
 -- _≈_ on TwoList is defined exactly as such
 ≈-=[toList]⇒-≡  : (_≈_ {A = A}) =[ toList ]⇒ _≡_
 ≈-=[toList]⇒-≡ x≈y = x≈y
-
-------------------------------------------------------------------------
--- TwoList Queue is a Queue!
-
--- for some reason, unless manually passing some implicits, other implicits remain
--- unsolved? This is also means that you can't assign fields with record syntax and
--- have to use co-pattern matching. My knowledge of implicits isn't good enough to know
--- why or if this indicates 'bad ergonomics'
-
--- instance
---   TwoList-IsQueue : IsQueue {a} TwoList-RawQueue
---   TwoList-IsQueue .IsQueue.isEquivalence = ≈-isEquivalence
---   TwoList-IsQueue .IsQueue.≈-resp-Empty {x = x} {y} = ≈-resp-Empty {x = x} {y = y}
---   TwoList-IsQueue .IsQueue.≈-=[toList]⇒-≡ {x = x} {y} = ≈-=[toList]⇒-≡ {x = x} {y = y}
---   TwoList-IsQueue .IsQueue.empty-toList {q = q} = empty-toList {q = q}
---   TwoList-IsQueue .IsQueue.empty-fromList = empty-fromList
---   TwoList-IsQueue .IsQueue.toList-fromList {q = q} = toList-fromList {q = q}
---   TwoList-IsQueue .IsQueue.fromList-toList {q = q} = fromList-toList {q = q}
---   TwoList-IsQueue .IsQueue.toList-enqueue {q = q} = toList-enqueue {q = q}
---   TwoList-IsQueue .IsQueue.toList-dequeue = {!!}

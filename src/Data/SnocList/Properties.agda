@@ -10,6 +10,8 @@ module Data.SnocList.Properties where
 
 open import Algebra.Definitions as AlgebraicDefinitions using ()
 open import Data.Empty using (⊥-elim)
+open import Data.List.Base using () renaming (_++_ to _++>_)
+open import Data.List.Properties using () renaming (++-assoc to ++>-assoc; ++-identityʳ to ++>-identityʳ)
 open import Data.Nat.Base using (suc; _+_)
 open import Data.Product.Base using (_,_)
 open import Data.SnocList.Base
@@ -57,7 +59,6 @@ xs<>>[]≡[] : ∀ {xs : List< A} → xs <>> [] ≡ [] → xs ≡ []
 xs<>>[]≡[] {xs = []} xs<>>[]≡[] = refl
 xs<>>[]≡[] {xs = (xs <: x)} xs<>>[]≡[] = ⊥-elim (¬xs<>>ys≡[] {xs = xs} {ys = []} xs<>>[]≡[])
 
--- ([] <: x <>< xs) <>> [] ≡ x :> xs
 []<><xs<>>[]≡xs : ∀ {xs : List> A} → ([] <>< xs) <>> [] ≡ xs
 []<><xs<>>[]≡xs {xs = []} = refl
 []<><xs<>>[]≡xs {xs = x :> xs} = begin
@@ -65,7 +66,6 @@ xs<>>[]≡[] {xs = (xs <: x)} xs<>>[]≡[] = ⊥-elim (¬xs<>>ys≡[] {xs = xs} 
   x :> (([] <>< xs) <>> []) ≡⟨ cong (_:>_ x) ([]<><xs<>>[]≡xs {xs = xs}) ⟩
   x :> xs                   ∎
   where
-    -- Goal: ([] <: y <>< ys) <>> [] ≡ y :> ([] <>< ys) <>> []
     aux : ∀ {y} {ys : List> A} → ([] <: y <>< ys) <>> [] ≡ y :> (([] <>< ys) <>> [])
     aux {y = y} {ys = ys} = begin
       ([] <: y <>< ys) <>> []            ≡⟨ fish-and-chips ys ([] <: y) [] ⟩
@@ -94,3 +94,31 @@ module _ {A : Set a} where
 
   ++-identity : Identity [] _++_
   ++-identity = ++-identityˡ , ++-identityʳ
+
+<>>++∷ : ∀ {z} {xs : List< A} {ys zs : List> A} → (xs <>> ys) ++> (z :> zs) ≡ (xs <>> (ys ++> (z :> []))) ++> zs
+<>>++∷ {z = z} {xs = []} {ys = ys} {zs = zs} = begin
+  ys ++> (z :> zs)          ≡⟨⟩
+  ys ++> ((z :> []) ++> zs) ≡⟨ sym (++>-assoc ys (z :> []) zs) ⟩
+  (ys ++> (z :> [])) ++> zs ∎
+<>>++∷ {z = z} {xs = xs <: x} {ys = ys} {zs = zs} = <>>++∷ {z = z} {xs = xs} {ys = (x :> ys)} {zs = zs}
+
+<>>-toList>++ : ∀ {xs : List< A} {ys : List> A} → xs <>> ys ≡ (toList> xs) ++> ys
+<>>-toList>++ {xs = []} = refl
+<>>-toList>++ {xs = xs <: x} {ys} = begin
+  (xs <: x) <>> ys           ≡⟨⟩
+  xs <>> (x :> ys)           ≡⟨ <>>-toList>++ {xs = xs} ⟩
+  (toList> xs) ++> (x :> ys) ≡⟨ <>>++∷ {xs = xs} ⟩
+  (xs <>> (x :> [])) ++> ys  ∎
+
+-- toList> distributes over _++_ (with a change in direction of ++)
+-- is it really distributive if it's with two different ++?
+toList>-distrib-++ : ∀ {xs ys : List< A} → toList> (xs ++ ys) ≡ (toList> xs) ++> (toList> ys)
+toList>-distrib-++ {xs = xs} {ys = []} = begin
+  xs <>> []        ≡⟨ sym (++>-identityʳ (xs <>> [])) ⟩
+  xs <>> [] ++> [] ∎
+toList>-distrib-++ {xs = xs} {ys = ys <: y} = begin
+  (xs ++ ys) <>> (y :> [])                  ≡⟨ <>>-toList>++ {xs = (xs ++ ys)} ⟩
+  (toList> (xs ++ ys)) ++> (y :> [])        ≡⟨ cong (λ x → x ++> (y :> [])) (toList>-distrib-++ {xs = xs} {ys = ys}) ⟩
+  (toList> xs ++> toList> ys) ++> (y :> []) ≡⟨ Data.List.Properties.++-assoc (toList> xs) (toList> ys) (y :> []) ⟩
+  toList> xs ++> toList> ys ++> (y :> [])   ≡⟨ cong (λ x → toList> xs ++> x) (sym (<>>-toList>++ {xs = ys})) ⟩
+  toList> xs ++> ys <>> (y :> [])           ∎

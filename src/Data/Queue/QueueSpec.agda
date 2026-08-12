@@ -42,15 +42,13 @@ record RawQueue (Q : Set a → Set a) : Set (suc a) where
     toList   : Q A → List A
     enqueue  : A → Q A → Q A
     dequeue  : (q : Q A) → .{{False (empty? q)}} → Q A × A
+    size : Q A → ℕ
 
   empty : Q A
   empty = fromList []
 
   pure    : A → Q A
   pure = fromList ∘ List.[_]
-
-  size : Q A → ℕ
-  size = length ∘ toList
 
   to𝔹 : Q A → Bool
   to𝔹 = isYes ∘ empty?
