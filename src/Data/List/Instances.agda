@@ -48,7 +48,7 @@ instance
   listMonadPlus = monadPlus
   listIsString = isString
   -- ListT
-    listTFunctor = λ {f} {g} {M} {{inst}} → Trans.functor {f} {g} {M} inst
+  listTFunctor = λ {f} {g} {M} {{inst}} → Trans.functor {f} {g} {M} inst
   listTApplicative = λ {f} {g} {M} {{inst}} → Trans.applicative {f} {g} {M} inst
   listTMonad = λ {f} {g} {M} {{inst}} → Trans.monad {f} {g} {M} inst
   listTMonadT = λ {f} {g} {M} {{inst}} → Trans.monadT {f} {g} {M} inst
