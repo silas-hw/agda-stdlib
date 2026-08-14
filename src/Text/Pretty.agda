@@ -12,6 +12,7 @@ open import Data.Nat.Base using (ℕ)
 
 module Text.Pretty (width : ℕ) where
 
+open import Agda.Builtin.Reflection using (Precedence) public
 import Level
 open import Data.Char.Base using (Char)
 open import Data.List.Base
@@ -137,3 +138,17 @@ commaSep = foldDoc (λ d e → d <> comma <+> e)
 
 newline : Doc
 newline = flush empty
+
+------------------------------------------------------------------------
+-- Pretty class
+
+private
+  variable
+    a : Level.Level
+
+record Pretty (A : Set a) : Set a where
+  field
+    pPrintPrec : Precedence → A → Doc
+
+  pPrint : A → Doc
+  pPrint = pPrintPrec Precedence.unrelated
