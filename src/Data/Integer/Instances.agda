@@ -16,13 +16,13 @@ open import Data.String.Base using (toList)
 open import Relation.Binary.PropositionalEquality.Properties
   using (isDecEquivalence)
 
-open import Text.Show using (Show)
+open import Text.Write using (Write)
 
 instance
   ℤ-≡-isDecEquivalence = isDecEquivalence _≡?_
   ℤ-≤-isDecTotalOrder = ≤-isDecTotalOrder
 
 instance
-  open Show
-  IntShow : Show ℤ
-  IntShow .showsPrecList _ i str = toList (showℤ i) ++ str
+  open Write
+  IntWrite : Write ℤ
+  IntWrite .writesPrecList _ i str = toList (showℤ i) ++ str
