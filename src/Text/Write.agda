@@ -6,7 +6,7 @@
 
 {-# OPTIONS --without-K --safe  #-}
 
-module Text.Show where
+module Text.Write where
 
 -- should builtin be used?
 open import Agda.Builtin.Reflection using (Precedence) public
@@ -23,18 +23,18 @@ private
     a : Level
     A : Set a
 
-record Show (A : Set a) :  Set a where
+record Write (A : Set a) :  Set a where
   field
-    showsPrecList :  Precedence → A → List Char → List Char
+    writesPrecList :  Precedence → A → List Char → List Char
 
-  showPrecList : Precedence → A → List Char
-  showPrecList prec x =  showsPrecList prec x []
+  writePrecList : Precedence → A → List Char
+  writePrecList prec x =  writesPrecList prec x []
 
-  showsPrec : Precedence → A → String → String
-  showsPrec prec x str = fromList (showsPrecList prec x (toList str))
+  writesPrec : Precedence → A → String → String
+  writesPrec prec x str = fromList (writesPrecList prec x (toList str))
 
-  showPrec : Precedence → A → String
-  showPrec prec x = fromList (showsPrecList prec x [])
+  writePrec : Precedence → A → String
+  writePrec prec x = fromList (writesPrecList prec x [])
 
-  show : A → String
-  show = showPrec Precedence.unrelated
+  write : A → String
+  write = writePrec Precedence.unrelated

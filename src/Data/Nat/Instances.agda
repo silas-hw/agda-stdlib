@@ -15,13 +15,13 @@ open import Data.Nat.Show using () renaming (show to showℕ)
 open import Data.String.Base using (toList)
 open import Relation.Binary.PropositionalEquality.Properties
   using (isDecEquivalence)
-open import Text.Show using (Show)
+open import Text.Write using (Write)
 
 instance
   ℕ-≡-isDecEquivalence = isDecEquivalence _≡?_
   ℕ-≤-isDecTotalOrder = ≤-isDecTotalOrder
 
 instance
-  open Show
-  NatShow : Show ℕ
-  NatShow .showsPrecList _ n str = (toList (showℕ n)) ++ str
+  open Write
+  NatWrite : Write ℕ
+  NatWrite .writesPrecList _ n str = (toList (showℕ n)) ++ str
