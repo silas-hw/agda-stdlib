@@ -15,9 +15,10 @@ open import Data.List.Properties using () renaming (++-assoc to ++>-assoc; ++-id
 open import Data.Nat.Base using (suc; _+_)
 open import Data.Product.Base using (_,_)
 open import Data.SnocList.Base
+open import Level using (Level)
 open import Relation.Binary.PropositionalEquality.Core as ≡
 open import Relation.Binary.PropositionalEquality.Properties as ≡
-open import Level using (Level)
+open import Tactic.Cong using (cong!)
 
 open ≡-Reasoning
 
@@ -47,7 +48,7 @@ toList>-fromList> (x :> xs) = begin
   (([] <: x) <>< xs) <>> []            ≡⟨ fish-and-chips xs ([] <: x) [] ⟩
   ([] <: x) <>> (([] <>< xs) <>> [])   ≡⟨⟩
   [] <>> (x :> (([] <>< xs) <>> []))   ≡⟨⟩
-  [] <>> (x :> toList> (fromList> xs)) ≡⟨ cong (λ e → [] <>> (x :> e)) (toList>-fromList> xs) ⟩
+  [] <>> (x :> toList> (fromList> xs)) ≡⟨ cong! (toList>-fromList> xs) ⟩
   [] <>> (x :> xs)                     ≡⟨⟩
   x :> xs                              ∎
 
@@ -118,7 +119,7 @@ toList>-distrib-++ {xs = xs} {ys = []} = begin
   xs <>> [] ++> [] ∎
 toList>-distrib-++ {xs = xs} {ys = ys <: y} = begin
   (xs ++ ys) <>> (y :> [])                  ≡⟨ <>>-toList>++ {xs = (xs ++ ys)} ⟩
-  (toList> (xs ++ ys)) ++> (y :> [])        ≡⟨ cong (λ x → x ++> (y :> [])) (toList>-distrib-++ {xs = xs} {ys = ys}) ⟩
+  (toList> (xs ++ ys)) ++> (y :> [])        ≡⟨ cong! (toList>-distrib-++ {xs = xs} {ys = ys}) ⟩
   (toList> xs ++> toList> ys) ++> (y :> []) ≡⟨ Data.List.Properties.++-assoc (toList> xs) (toList> ys) (y :> []) ⟩
-  toList> xs ++> toList> ys ++> (y :> [])   ≡⟨ cong (λ x → toList> xs ++> x) (sym (<>>-toList>++ {xs = ys})) ⟩
+  toList> xs ++> toList> ys ++> (y :> [])   ≡⟨ cong! (sym (<>>-toList>++ {xs = ys})) ⟩
   toList> xs ++> ys <>> (y :> [])           ∎

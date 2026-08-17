@@ -33,6 +33,7 @@ open import Relation.Binary.Definitions using (Reflexive; _Respects_)
 open import Relation.Binary.Structures using (IsEquivalence)
 open import Relation.Nullary using (¬_; False; contradiction)
 open import Relation.Unary using (Pred)
+open import Tactic.Cong using (cong!)
 
 open ≡-Reasoning
 
@@ -106,19 +107,19 @@ empty-fromList {xs = x ∷ xs} nullxs = contradiction nullxs ¬Null
 toList-enqueue : ∀ {q : Queue A} {x : A} → toList (enqueue x q) ≡ x ∷ toList q
 toList-enqueue {q = mkQ [] back inv} {x} = begin
   x ∷ []         ≡⟨⟩
-  x ∷ [] ++ []   ≡⟨ sym (cong (λ y → x ∷ y ++ []) (nullxs→xs≡[] (inv []))) ⟩
+  x ∷ [] ++ []   ≡⟨ sym (cong! (nullxs→xs≡[] (inv []))) ⟩
   x ∷ back ++ [] ∎
 toList-enqueue {q = mkQ (front <: x) back inv} = refl
 
 toList-dequeue  : ∀ {q : Queue A} → .{{i : False (empty? q)}} →
                       let xr = dequeue q {{i}} in toList q ≡ toList (proj₁ xr) ∷ʳ proj₂ xr
 toList-dequeue {q = mkQ (xs <: x) [] inv} = begin
-  xs <>> (x ∷ [])                                          ≡⟨ cong (λ y → y <>> (x ∷ [])) (sym (++<-identityˡ xs)) ⟩
+  xs <>> (x ∷ [])                                          ≡⟨ cong! (sym (++<-identityˡ xs)) ⟩
   ([] ++< xs) <>> (x ∷ [])                                 ≡⟨ <>>-toList>++ {xs = ([] ++< xs)} ⟩
-  (toList> ([] ++< xs)) ++ (x ∷ [])                        ≡⟨ cong (λ y → y ++ (x ∷ [])) (toList>-distrib-++ {xs = []} {ys = xs}) ⟩
-  ([] ++ (toList> xs)) ++ (x ∷ [])                         ≡⟨ cong (λ y → (y ++ (toList> xs)) ++ (x ∷ [])) (sym (queue-back[] {xs = xs})) ⟩
+  (toList> ([] ++< xs)) ++ (x ∷ [])                        ≡⟨ cong! (toList>-distrib-++ {xs = []} {ys = xs}) ⟩
+  ([] ++ (toList> xs)) ++ (x ∷ [])                         ≡⟨ cong! (sym (queue-back[] {xs = xs})) ⟩
   ((Queue.back (queue xs [])) ++ (toList> xs)) ++ (x ∷ []) ≡⟨⟩
-  ((Queue.back (queue xs [])) ++ (xs <>> [])) ++ (x ∷ [])  ≡⟨ cong (λ y → ((Queue.back (queue xs [])) ++ (y <>> [])) ++ (x ∷ [])) (sym (queue-front {xs = xs})) ⟩
+  ((Queue.back (queue xs [])) ++ (xs <>> [])) ++ (x ∷ [])  ≡⟨ cong! (sym (queue-front {xs = xs})) ⟩
   ((Queue.back (queue xs [])) ++ (Queue.front (queue xs []) <>> [])) ++ (x ∷ []) ∎
 
 -- either xs empty, so Queue.back ≡ [], or xs is not, so Queue.back ≡ y ∷ ys
@@ -126,13 +127,13 @@ toList-dequeue {q = mkQ ([] <: x) (y ∷ ys) inv} = sym (begin
    (([] <: y) <>< ys) <>> [] ++ x ∷ []         ≡⟨ cong (λ z → z ++ x ∷ []) (fish-and-chips ys ([] <: y) []) ⟩
    ([] <: y) <>> ([] <>< ys) <>> [] ++ x ∷ []  ≡⟨⟩
    [] <>> (y ∷ (([] <>< ys) <>> [] ++ x ∷ [])) ≡⟨⟩
-   (y ∷ (([] <>< ys) <>> [] ++ x ∷ []))        ≡⟨ cong (λ z → y ∷ (z ++ x ∷ [])) ([]<><xs<>>[]≡xs {xs = ys}) ⟩
+   (y ∷ (([] <>< ys) <>> [] ++ x ∷ []))        ≡⟨ cong! ([]<><xs<>>[]≡xs {xs = ys}) ⟩
    y ∷ ys ++ x ∷ []                            ∎
    )
 
 toList-dequeue {q = mkQ ((xs <: z) <: x) (y ∷ ys) inv} = begin
   y ∷ ys ++ xs <>> (z ∷ x ∷ [])           ≡⟨⟩
-  y ∷ (ys ++ xs <>> (z ∷ x ∷ []))         ≡⟨ cong (λ w → y ∷ (ys ++ w)) (sym (++-identityʳ (xs <>> (z ∷ x ∷ [])))) ⟩
+  y ∷ (ys ++ xs <>> (z ∷ x ∷ []))         ≡⟨ cong! (sym (++-identityʳ (xs <>> (z ∷ x ∷ [])))) ⟩
   y ∷ (ys ++ xs <>> (z ∷ x ∷ []) ++ [])   ≡⟨ cong (λ w → y ∷ (ys ++ w)) (++<>> {xs = xs} {ys = []})⟩
   y ∷ (ys ++ xs <>> (z ∷ []) ++ (x ∷ [])) ≡⟨ cong (λ w → y ∷ w) (sym (Data.List.Properties.++-assoc ys (xs <>> (z ∷ [])) (x ∷ []))) ⟩
   y ∷ (ys ++ xs <>> (z ∷ [])) ++ x ∷ []   ∎
