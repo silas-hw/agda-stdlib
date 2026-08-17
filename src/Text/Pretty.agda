@@ -152,3 +152,6 @@ record Pretty (A : Set a) : Set a where
 
   pPrint : A → Doc
   pPrint = pPrintPrec Precedence.unrelated
+
+  pretty : A → String
+  pretty = render ∘ pPrint
