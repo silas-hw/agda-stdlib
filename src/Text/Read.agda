@@ -30,7 +30,7 @@ record Read (A : Set a) : Set a where
 
   readPrecList : Precedence → List Char → Maybe A
   readPrecList prec str = map proj₁ (readsPrecList prec str)
-  
+
   readsPrec : Precedence → String → Maybe (A × String)
   readsPrec prec str = map (map× id fromList) (readsPrecList prec (toList str))
 
