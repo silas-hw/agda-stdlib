@@ -1,4 +1,12 @@
+------------------------------------------------------------------------
+-- The Agda standard library
+--
+-- Unsafe instances for List
+------------------------------------------------------------------------
+
 {-# OPTIONS --with-K #-}
+
+module Data.List.Unsafe.Instances where
 
 open import Data.List.Base
 open import Data.Nat.Base
