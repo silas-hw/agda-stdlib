@@ -24,6 +24,6 @@ private
     a : Level
     A : Set a
 
-record Read (A : Set a) :  Set a where
+record Read (A : Set a) : Set a where
   field
     read : String → Maybe A
