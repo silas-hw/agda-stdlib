@@ -36,7 +36,7 @@ Steps:
 
    we instead need
 
-   MyData'Write : {{ Write ℕ }} → {x : ℕ} → Write (MyData x) 
+   MyData'Write : {{ Write ℕ }} → {x : ℕ} → Write (MyData x)
 3. For records, print in record syntax (record { x = y, ... }), recursively
    calling write on fields
 4. For data, get fixity of constructor and recursively call write, intertwining
