@@ -34,6 +34,6 @@ instance
   open Read {{...}}
   NatRead : Read ℕ
   NatRead .readsPrecList prec str = do
-    let (x , y) = spanᵇ isDigit str
-    num ← readMaybe 10 (fromList x)
-    just (num , y)
+    let (digits , leftover) = spanᵇ isDigit str
+    num ← readMaybe 10 (fromList digits)
+    just (num , leftover)
