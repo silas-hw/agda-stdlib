@@ -4,6 +4,8 @@
 -- Unsafe instances for Nat
 ------------------------------------------------------------------------
 
+{-# OPTIONS --with-K #-}
+
 module Data.Nat.Unsafe.Instances where
 
 open import Data.Nat.Base
