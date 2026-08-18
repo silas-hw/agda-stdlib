@@ -8,13 +8,17 @@
 
 module Data.Nat.Instances where
 
-open import Data.List.Base using (_++_)
-open import Data.Nat.Base using (ℕ)
+open import Data.Char using (isDigit)
+open import Data.List.Base using (_++_; spanᵇ)
+open import Data.Maybe using (_>>=_; just)
+open import Data.Nat.Base using (ℕ; _≤ᵇ_)
 open import Data.Nat.Properties using (≤-isDecTotalOrder; _≡?_)
-open import Data.Nat.Show using () renaming (show to showℕ)
-open import Data.String.Base using (toList)
+open import Data.Nat.Show using (readMaybe) renaming (show to showℕ)
+open import Data.Product using (_,_)
+open import Data.String.Base using (toList; fromList)
 open import Relation.Binary.PropositionalEquality.Properties
   using (isDecEquivalence)
+open import Text.Read using (Read)
 open import Text.Write using (Write)
 
 instance
@@ -25,3 +29,11 @@ instance
   open Write
   NatWrite : Write ℕ
   NatWrite .writesPrecList _ n str = (toList (showℕ n)) ++ str
+
+instance
+  open Read {{...}}
+  NatRead : Read ℕ
+  NatRead .readsPrecList prec str = do
+    let (x , y) = spanᵇ isDigit str
+    num ← readMaybe 10 (fromList x)
+    just (num , y)
