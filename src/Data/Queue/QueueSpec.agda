@@ -42,7 +42,7 @@ record RawQueue (Q : Set a → Set a) : Set (suc a) where
     toList   : Q A → List A
     enqueue  : A → Q A → Q A
     dequeue  : (q : Q A) → .{{False (empty? q)}} → Q A × A
-    size : Q A → ℕ
+    size     : Q A → ℕ
 
   empty : Q A
   empty = fromList []
