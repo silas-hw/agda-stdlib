@@ -6,6 +6,8 @@
 
 {-# OPTIONS --without-K --safe #-}
 
+-- NOTE: still figuring things out, just pushing to get over to other device
+
 module Text.Write.Deriving where
 
 open import Data.List.Base using (_∷_; []; List; concat; _++_; zip)
