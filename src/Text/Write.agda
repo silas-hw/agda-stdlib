@@ -25,6 +25,7 @@ private
     A : Set a
 
 record Write (A : Set a) :  Set a where
+  constructor mkWrite
   field
     writesPrecList :  Precedence → A → List Char → List Char
 
