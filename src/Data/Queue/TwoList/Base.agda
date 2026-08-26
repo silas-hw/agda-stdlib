@@ -15,7 +15,7 @@ module Data.Queue.TwoList.Base where
 
 open import Level using (Level)
 open import Data.Bool.Base using (Bool; true; false)
-open import Data.List.Base as List using (List; []; _∷_; reverse; _++_; length; null)
+open import Data.List.Base as List using (List; []; _∷_; [_]; reverse; _++_; length; null)
 open import Data.List.Relation.Unary.All using (Null; []; _∷_)
 open import Data.List.Relation.Unary.All.Properties using (null⇒Null; Null⇒null)
 open import Data.Maybe.Base using (Maybe; nothing; just)
@@ -108,7 +108,7 @@ dequeue (mkQ (xs <: x) back _) = queue xs back , x
 
 -- Create a queue with a single element
 singleton : A → Queue A
-singleton = fromList ∘ List.[_]
+singleton = fromList ∘ [_]
 
 -- map : (A → B) → Queue A → Queue B
 -- map f empty = empty

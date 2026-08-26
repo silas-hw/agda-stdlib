@@ -9,7 +9,7 @@
 module Data.Queue.TwoList.Properties where
 
 open import Level using (Level)
-open import Data.List.Base using (List; _∷_; _∷ʳ_; _++_; length)
+open import Data.List.Base using (List; _∷_; [_]; _∷ʳ_; _++_; length)
 open import Data.List.Properties using (++-identityʳ; length-++; length-reverse; ++-assoc)
 open import Data.List.Relation.Unary.All using (All; Null; [])
 open import Data.List.Relation.Unary.All.Properties using (++⁺; nullxs→xs≡[])
@@ -114,36 +114,36 @@ toList-enqueue {q = mkQ (front <: x) back inv} = refl
 toList-dequeue  : ∀ {q : Queue A} → .{{i : False (empty? q)}} →
                       let xr = dequeue q {{i}} in toList q ≡ toList (proj₁ xr) ∷ʳ proj₂ xr
 toList-dequeue {q = mkQ (xs <: x) [] inv} = begin
-  xs <>> (x ∷ [])                                          ≡⟨ cong! (sym (++<-identityˡ xs)) ⟩
-  ([] ++< xs) <>> (x ∷ [])                                 ≡⟨ <>>-toList>++ {xs = ([] ++< xs)} ⟩
-  (toList> ([] ++< xs)) ++ (x ∷ [])                        ≡⟨ cong! (toList>-distrib-++ {xs = []} {ys = xs}) ⟩
-  ([] ++ (toList> xs)) ++ (x ∷ [])                         ≡⟨ cong! (sym (queue-back[] {xs = xs})) ⟩
-  ((Queue.back (queue xs [])) ++ (toList> xs)) ++ (x ∷ []) ≡⟨⟩
-  ((Queue.back (queue xs [])) ++ (xs <>> [])) ++ (x ∷ [])  ≡⟨ cong! (sym (queue-front {xs = xs})) ⟩
-  ((Queue.back (queue xs [])) ++ (Queue.front (queue xs []) <>> [])) ++ (x ∷ []) ∎
+  xs <>> [ x ]                                          ≡⟨ cong! (sym (++<-identityˡ xs)) ⟩
+  ([] ++< xs) <>> [ x ]                                 ≡⟨ <>>-toList>++ {xs = ([] ++< xs)} ⟩
+  (toList> ([] ++< xs)) ++ [ x ]                        ≡⟨ cong! (toList>-distrib-++ {xs = []} {ys = xs}) ⟩
+  ([] ++ (toList> xs)) ++ [ x ]                         ≡⟨ cong! (sym (queue-back[] {xs = xs})) ⟩
+  ((Queue.back (queue xs [])) ++ (toList> xs)) ++ [ x ] ≡⟨⟩
+  ((Queue.back (queue xs [])) ++ (xs <>> [])) ++ [ x ]  ≡⟨ cong! (sym (queue-front {xs = xs})) ⟩
+  ((Queue.back (queue xs [])) ++ (Queue.front (queue xs []) <>> [])) ++ [ x ] ∎
 
 -- either xs empty, so Queue.back ≡ [], or xs is not, so Queue.back ≡ y ∷ ys
 toList-dequeue {q = mkQ ([] <: x) (y ∷ ys) inv} = sym (begin
-   (([] <: y) <>< ys) <>> [] ++ x ∷ []         ≡⟨ cong (λ z → z ++ x ∷ []) (fish-and-chips ys ([] <: y) []) ⟩
-   ([] <: y) <>> ([] <>< ys) <>> [] ++ x ∷ []  ≡⟨⟩
-   [] <>> (y ∷ (([] <>< ys) <>> [] ++ x ∷ [])) ≡⟨⟩
-   (y ∷ (([] <>< ys) <>> [] ++ x ∷ []))        ≡⟨ cong! ([]<><xs<>>[]≡xs {xs = ys}) ⟩
-   y ∷ ys ++ x ∷ []                            ∎
+   (([] <: y) <>< ys) <>> [] ++ [ x ]         ≡⟨ cong (λ z → z ++ x ∷ []) (fish-and-chips ys ([] <: y) []) ⟩
+   ([] <: y) <>> ([] <>< ys) <>> [] ++ [ x ]  ≡⟨⟩
+   [] <>> (y ∷ (([] <>< ys) <>> [] ++ [ x ])) ≡⟨⟩
+   (y ∷ (([] <>< ys) <>> [] ++ [ x ]))        ≡⟨ cong! ([]<><xs<>>[]≡xs {xs = ys}) ⟩
+   y ∷ ys ++ [ x ]                            ∎
    )
 
 toList-dequeue {q = mkQ ((xs <: z) <: x) (y ∷ ys) inv} = begin
   y ∷ ys ++ xs <>> (z ∷ x ∷ [])           ≡⟨⟩
   y ∷ (ys ++ xs <>> (z ∷ x ∷ []))         ≡⟨ cong! (sym (++-identityʳ (xs <>> (z ∷ x ∷ [])))) ⟩
   y ∷ (ys ++ xs <>> (z ∷ x ∷ []) ++ [])   ≡⟨ cong (λ w → y ∷ (ys ++ w)) (++<>> {xs = xs} {ys = []})⟩
-  y ∷ (ys ++ xs <>> (z ∷ []) ++ (x ∷ [])) ≡⟨ cong (λ w → y ∷ w) (sym (Data.List.Properties.++-assoc ys (xs <>> (z ∷ [])) (x ∷ []))) ⟩
-  y ∷ (ys ++ xs <>> (z ∷ [])) ++ x ∷ []   ∎
+  y ∷ (ys ++ xs <>> (z ∷ []) ++ ([ x ]))  ≡⟨ cong (λ w → y ∷ w) (sym (Data.List.Properties.++-assoc ys (xs <>> (z ∷ [])) ([ x ]))) ⟩
+  y ∷ (ys ++ xs <>> (z ∷ [])) ++ [ x ]    ∎
 
   where
     ++<>> : ∀ {x y} {xs : List< A} {ys : List A} → xs <>> (x ∷ y ∷ []) ++ ys ≡ (xs <>> (x ∷ [])) ++ (y ∷ ys)
     ++<>> {x = x} {y} {xs} {ys} = begin
-      xs <>> (x ∷ y ∷ []) ++ ys ≡⟨⟩
-      xs <>> ((x ∷ []) ++ (y ∷ [])) ++ ys ≡⟨ sym (<>>++∷ {xs = xs} {ys = (x ∷ [])}) ⟩
-      xs <>> (x ∷ []) ++ y ∷ ys ∎
+      xs <>> (x ∷ y ∷ []) ++ ys     ≡⟨⟩
+      xs <>> ([ x ] ++ [ y ]) ++ ys ≡⟨ sym (<>>++∷ {xs = xs} {ys = [ x ]}) ⟩
+      xs <>> [ x ] ++ y ∷ ys        ∎
 
 ------------------------------------------------------------------------
 -- Properties relating to size
@@ -171,7 +171,7 @@ size-enqueue {a = a} {A = A} x q@(mkQ [] back inv) = begin
       length (back ++ []) ≡⟨ cong length (++-identityʳ back) ⟩
       length back         ≡⟨ cong length back[] ⟩
       length {a} {A} []   ≡⟨⟩
-      0 ∎
+      0                   ∎
 
 size-enqueue {A = A} x q@(mkQ front@(_ <: _) back inv) = begin
   size (queue front (x ∷ back))              ≡⟨⟩
