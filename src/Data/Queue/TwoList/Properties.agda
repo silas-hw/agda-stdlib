@@ -12,7 +12,7 @@ open import Level using (Level)
 open import Data.List.Base using (List; _∷_; [_]; _∷ʳ_; _++_; length)
 open import Data.List.Properties using (++-identityʳ; length-++; length-reverse; ++-assoc)
 open import Data.List.Relation.Unary.All using (All; Null; [])
-open import Data.List.Relation.Unary.All.Properties using (++⁺; nullxs→xs≡[])
+open import Data.List.Relation.Unary.All.Properties using (++⁺; nullxs→xs≡[]; ¬Null-∷)
 open import Data.Nat.Base using (suc; _+_)
 open import Data.Nat.Properties using (+-comm; +-suc; +-assoc)
 open import Data.Product.Base using (_×_; proj₁; proj₂)
@@ -42,9 +42,6 @@ private
     a b : Level
     A : Set a
     B : Set b
-
-  ¬Null : {x : A} {xs : List A} → ¬ Null (x ∷ xs)
-  ¬Null (() Data.List.Relation.Unary.All.∷ n)
 
   queue-back[] : ∀ {xs : List< A} → (Queue.back (queue xs [])) ≡ []
   queue-back[] {xs = []} = refl
@@ -102,7 +99,7 @@ empty-toList {q = mkQ front back inv} emptyq = ++⁺ {xs = back} (inv emptyq) (a
 
 empty-fromList  : ∀ {xs : List A} → Null xs → Empty (fromList xs)
 empty-fromList {xs = []} nullxs = []
-empty-fromList {xs = x ∷ xs} nullxs = contradiction nullxs ¬Null
+empty-fromList {xs = x ∷ xs} nullxs = contradiction nullxs ¬Null-∷
 
 toList-enqueue : ∀ {q : Queue A} {x : A} → toList (enqueue x q) ≡ x ∷ toList q
 toList-enqueue {q = mkQ [] back inv} {x} = begin

@@ -3,6 +3,7 @@
 --
 -- Queues, basic types and operations
 ------------------------------------------------------------------------
+
 {-# OPTIONS --without-K --safe #-}
 
 -- Queues implemented with the two-list method described in
