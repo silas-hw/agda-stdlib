@@ -1,4 +1,4 @@
-------------------------------------------------------------------------
+
 -- The Agda standard library
 --
 -- Macro for deriving instances of Write
@@ -16,33 +16,32 @@ module Text.Write.Deriving where
 
 open import Data.Bool.Base using (Bool; false; true; if_then_else_)
 open import Data.Char.Properties using (_≡?_)
-open import Data.List.Base using (_∷_; []; [_]; List; concat; _++_; zip; wordsBy; length; map)
+open import Data.List.Base using (_∷_; []; [_]; List; concat; _++_; zip; wordsBy; length; map; drop)
 open import Data.List.Effectful
 open import Data.Maybe.Base using (just; nothing; fromMaybe; Maybe) renaming (_>>=_ to _>>=Maybe_)
-open import Data.Nat.Base using (ℕ; _+_; ∣_-_∣′)
+open import Data.Nat.Base using (ℕ; suc; _+_; ∣_-_∣′)
 open import Data.Nat.Instances
 open TraversableM using (mapM)
 open import Data.String.Base using (toList; fromList; String) renaming (_++_ to _++s_)
 open import Data.Unit using (⊤)
 open import Data.Product.Base using (_×_; _,_; uncurry; proj₁; proj₂)
-open import Function.Base using (_∘_)
+open import Function.Base using (_∘_; _$_)
 open import Reflection
 open import Reflection.AST.Show using (showName)
 open import Reflection.AST.Term using (Telescope; Clause; unknown; getName)
-open import Reflection.AST.Meta using (showMeta)
 open import Reflection.AST.Name using (_≡ᵇ_)
-open import Reflection.AST.Argument using (iArg; unArg)
+open import Reflection.AST.Argument using (vArg; hArg; iArg; unArg)
 open import Reflection.TCM
 open import Reflection.TCM.Effectful using () renaming (monad to monadTCM)
 open import Relation.Binary.PropositionalEquality using (_≡_)
 open import Text.Write using (Write; Char; Precedence)
 
 open import Level using (Level; suc; zero)
-  
+
 data Test : Set where
   a_-_-_ : ℕ → ℕ → ℕ → Test
   a' : Test
-  a'' : {!!}
+  a'' : Test
 
 {-
 Should this be placed in Tactic.DerivingWrite?
@@ -76,7 +75,7 @@ Steps:
    other types, use a map of instances for de Bruijn indices. But for the current type
    (in the case of induction), the name of the defined function must be used.
 
-   NOTE: map return an arg instead of a nat 
+   NOTE: map return an arg instead of a nat
 
 4. For data types, create a clause for each constructor and produce a pat-lam out of it
 
@@ -103,7 +102,7 @@ Reflection notes:
 
 Instance Notes:
 - Recursive calls have to be handled in a helper function, whose type signature
-  is the type of the field in Write. 
+  is the type of the field in Write.
 -}
 
 ------------------------------------------------------------------------
@@ -167,25 +166,17 @@ telStr : Telescope → List ErrorPart
 telStr [] = strErr "[]" ∷ []
 telStr ((nm , arg i t) ∷ xs) = strErr nm ∷ termErr t ∷ (telStr xs)
 
--- NOTE: a lot of these are likely already defined somewhere
-
-vra : {A : Set} → A → Arg A
-vra = arg (arg-info visible (modality relevant quantity-0))
-
-hra : {A : Set} → A → Arg A
-hra = arg (arg-info hidden (modality relevant quantity-0))
+telsStr : List Telescope → List ErrorPart
+telsStr tels = concat (map telStr tels)
 
 vrv :  ℕ → List (Arg Term) → Arg Term
-vrv n args = arg (arg-info visible (modality relevant quantity-0)) (var n args)
+vrv n args = vArg (var n args)
 
 vri : ℕ → Arg Term
 vri n = arg (arg-info instance′ (modality relevant quantity-0)) (var n [])
 
-vrit : {A : Set} → A → Arg A
-vrit = arg (arg-info instance′ (modality relevant quantity-0))
-
 vrv' : ℕ → Arg Term
-vrv' n = vrv n []
+vrv' n = vArg (var n [])
 
 ------------------------------------------------------------------------
 -- Machinery specific to Write
@@ -200,19 +191,21 @@ writeAuxType nm = {!!}
 
 -- Produce the type of a Write instance for a given class.
 --
--- Example: writeType List ↦ {a : Set} {A : Set a} → {{ Write A }} → Write (List A) 
+-- Example: writeType List ↦ {a : Set} {A : Set a} → {{ Write A }} → Write (List A)
 writeType : Name → TC Type
 writeType nm = {!!}
 
 -- TODO: doc comment can be better
 -- given the telescope for a constructor, produce the whole telescope for
 -- its clause
--- Precedence → A → List Char → List Char
+-- Precedence → A → List Char
 conTel : Telescope → Telescope
-conTel tel =  ("str" , (vra (quoteTerm (List Char)))) ∷ (tel ++ ("prec" , (vra (quoteTerm Precedence))) ∷ [])
+conTel tel =  ("str" , (vArg (quoteTerm (List Char)))) ∷ (tel ++ ("prec" , (vArg (quoteTerm Precedence))) ∷ [])
 
+-- The (tail of the) Telescope for the clause of the auxiliary write function for Records.
+-- i.e. Precedence → Record → List Char
 recTel : Type → Telescope
-recTel rec = conTel [ ("rec" , (vra rec)) ]
+recTel rec = conTel [ ("rec" , (vArg rec)) ]
 
 ------------------------------------------------------------------------
 -- Derive macro for Write
@@ -226,7 +219,7 @@ next (x ∷ xs) = x , xs
 -- Take a list of terms and turn it into a term of a list of said terms
 quoteList : List Term → Term
 quoteList [] = con (quote List.[]) []
-quoteList (x ∷ xs) = con (quote _∷_) (vra x ∷ [ (vra (quoteList xs)) ])
+quoteList (x ∷ xs) = con (quote _∷_) (vArg x ∷ [ (vArg (quoteList xs)) ])
 
 padSep : List Char → List Char
 padSep [] = []
@@ -239,9 +232,9 @@ open Write {{...}}
 --         Between values    Inst Map    num vals  tel
 telWrite' : List (List Char) → ℕ → Telescope → List Term
 telWrite' seps len [] = [ con (quote List.[]) [] ]
-telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷ 
+telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
                                        (def (quote writesPrecList)
-                                       (prec ∷ conVal ∷ vra suff ∷ [])) ∷
+                                       (prec ∷ conVal ∷ vArg suff ∷ [])) ∷
                                        (telWrite' seps' len xs)
           where
 
@@ -253,50 +246,50 @@ telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
 
             -- there must be a better way! maybe we should use strings
             sepTerm : Term
-            sepTerm = def (quote toList) ((vra (lit (string (fromList sep)))) ∷ [])
+            sepTerm = def (quote toList) ((vArg (lit (string (fromList sep)))) ∷ [])
 
             seps' : List (List Char)
             seps' = proj₂ sepSeps
-            
+
             inst : Arg Term
-            inst = arg (arg-info instance′ (modality relevant quantity-0)) unknown
+            inst = iArg unknown
 
             str : Arg Term
-            str = vrv' (len + 1)
+            str = vArg $ var (len + 1) []
 
             pref : Term
             pref = quoteTerm (toList "(")
 
             suff : Term
             suff = quoteTerm (toList ")")
-            
+
             strBrack : Arg Term
-            strBrack = vra (def (quote _++_) (vra (quoteTerm (toList ") ")) ∷ [ str ]))
+            strBrack = vArg (def (quote _++_) (vArg (quoteTerm (toList ") ")) ∷ [ str ]))
 
             conVal : Arg Term
-            conVal = vrv' (∣ len - (length xs) ∣′)
+            conVal = vArg $ var ∣ len - (length xs) ∣′ []
 
             prec : Arg Term
-            prec = vrv' 0
+            prec = vArg $ var 0 []
 
 telWrite : List (List Char) → ℕ → Telescope → Term
-telWrite seps n tel = def (quote concat) [ (vra (quoteList (telWrite' seps n tel))) ]
+telWrite seps n tel = def (quote concat) [ (vArg (quoteList (telWrite' seps n tel))) ]
 
 varPat : ℕ → Arg Pattern
-varPat n = vra (Pattern.var n)
+varPat n = vArg (Pattern.var n)
 
 insPat : ℕ → Arg Pattern
-insPat n = vrit (Pattern.var n)
+insPat n = iArg (Pattern.var n)
 
 telToVarPat : ℕ → List (Arg Pattern)
 telToVarPat 0 = []
 telToVarPat (ℕ.suc n) = telToVarPat n ++ (varPat (1 + n)) ∷ []
 
 conNameTerm : Name → Term
-conNameTerm nm = def (quote unqualify) (vra (def (quote toList) (nmLit ∷ [])) ∷ [])
+conNameTerm nm = def (quote unqualify) (vArg (def (quote toList) (nmLit ∷ [])) ∷ [])
   where
     nmLit : Arg Term
-    nmLit = vra (lit (string (showName nm)))
+    nmLit = vArg (lit (string (showName nm)))
 
 -- get a list of constructor seperators
 -- with an additional empty seperator
@@ -311,22 +304,21 @@ emptyCons : Name → Clause
 emptyCons nm = Clause.clause (conTel []) ((varPat 0) ∷ conPat ∷ ((varPat 1) ∷ [])) (conNameTerm nm)
   where
     conPat : Arg Pattern
-    conPat = vra (Pattern.con nm [])
+    conPat = vArg (Pattern.con nm [])
 
 -- derive the clause for a single constructor
-consClause : Name → Type → Clause
-consClause nm t with telView t
-... | [] , _ = emptyCons nm
-... | tel@(_ ∷ _) , _ = Clause.clause (conTel tel) (varPat 0 ∷ conPat ∷ strPat ∷ []) writeTerm
+consClause : Name → Telescope → Clause
+consClause nm [] = emptyCons nm
+consClause nm tel@(_ ∷ _) = Clause.clause (conTel tel) (varPat 0 ∷ conPat ∷ strPat ∷ []) writeTerm
   where
     precPat : Arg Pattern
     precPat = varPat 0
 
     telLen : ℕ
     telLen = Data.List.Base.length tel
-    
+
     conPat : Arg Pattern
-    conPat = vra (Pattern.con nm (telToVarPat telLen))
+    conPat = vArg (Pattern.con nm (telToVarPat telLen))
 
     strPat : Arg Pattern
     strPat = varPat (telLen + 1)
@@ -340,22 +332,22 @@ consClause nm t with telView t
 -- Prec → Rec → LC → LC
 recordOutputs : Name → List (Arg Name) → List Term
 recordOutputs nm [] = [ (quoteTerm (toList "}")) ]
-recordOutputs nm (x ∷ fs) = def (quote toList) [ vra (lit (string fieldName)) ] ∷
+recordOutputs nm (x ∷ fs) = def (quote toList) [ vArg (lit (string fieldName)) ] ∷
                             (quoteTerm (toList " = ")) ∷
                             def (quote writesPrecList) (vrv' 0 ∷ fieldArg ∷ vrv' 2 ∷ []) ∷
                             (quoteTerm (toList "; ")) ∷
                             recordOutputs nm fs
   where
     fieldArg : Arg Term
-    fieldArg = vra (def (unArg x) [ vrv' 1 ])
+    fieldArg = vArg (def (unArg x) [ vrv' 1 ])
 
     fieldName : String
     fieldName = fromList (unqualify (toList (showName (unArg x))))
-    
+
 
 recordTerm : Name → List (Arg Name) → Term
 recordTerm nm fs = def (quote concat) [
-                   (vra (quoteList (prefix ∷ outs))) ]
+                   (vArg (quoteList (prefix ∷ outs))) ]
            where
              prefix : Term
              prefix = quoteTerm (toList "record { ")
@@ -363,12 +355,26 @@ recordTerm nm fs = def (quote concat) [
              outs : List Term
              outs = recordOutputs nm fs
 
+weakenPi : ℕ → Type → Type
+weakenPi ℕ.zero t = t
+weakenPi (ℕ.suc n) (pi c (abs s x)) = weakenPi n x
+{-# CATCHALL #-}
+weakenPi _ t = t
+
+piCount : Type → ℕ
+piCount (pi c (abs s x)) = ℕ.suc (piCount x)
+{-# CATCHALL #-}
+piCount _ = 0
+
 -- cs in data-type contains actual constructor names
 -- 'name' in data-cons is just name of data type itself
 computeAuxWrite : Definition → TC (List Clause)
 computeAuxWrite (record-type c fs) = do
   t ← getType c
-  let tel = recTel t
+  let params = ∣ (piCount t) - (length fs) ∣′
+      t' = weakenPi params t
+  -- typeError [ termErr (weakenPi params t) ]
+  let tel = recTel t'
       pats = varPat 0 ∷ varPat 1 ∷ varPat 2 ∷ []
       body = recordTerm c fs
       clause = Clause.clause tel pats body
@@ -376,8 +382,11 @@ computeAuxWrite (record-type c fs) = do
   pure [ clause ]
 computeAuxWrite (data-type p cs) = do
   ts ← mapM monadTCM getType cs
-  let tels = Data.List.Base.map telView ts
-  let clauses = (Data.List.Base.map (uncurry consClause) (zip cs ts))
+  -- get telescope of each constructor with parameters removed
+  let tels = map (drop p ∘ proj₁ ∘ telView) ts
+  -- typeError [ strErr $ write p ]
+  -- typeError (telsStr (map (drop p ∘ proj₁) tels))
+  let clauses = (Data.List.Base.map (uncurry consClause) (zip cs tels))
   -- typeError (termErr (pat-lam clauses []) ∷ [])
   pure clauses
 {-# CATCHALL #-}
@@ -409,22 +418,22 @@ declareWriteInstance fnm class = do
 -- This also declares another top-level name with the 'expanded' type of Write
 -- (Precedence → A → List Char → List Char), and attaches the 'actual' definition to that.
 -- For a type T, the name of this auxillary function is "write[T]".
--- 
+--
 -- The instance then simply constructs a record of Write out of it. This is to allow
 -- for the definition to recurse on itself.
 defineWriteInstance : Name → Name → TC ⊤
 defineWriteInstance inm class = do
   fnm ← freshName ("write[" ++s showName inm ++s "]")
   ft ← writeAuxType class
-  
-  declareDef (vra fnm) ft
- 
-  defineFun inm (Clause.clause [] [] (con (quote Text.Write.mkWrite) [ vra (def fnm []) ]) ∷ [])
+
+  declareDef (vArg fnm) ft
+
+  defineFun inm (Clause.clause [] [] (con (quote Text.Write.mkWrite) [ vArg (def fnm []) ]) ∷ [])
 
   classDef ← getDefinition class
   clauses ← computeAuxWrite classDef
   defineFun fnm clauses
-  
+
   pure _
 
 -- Usage (example for List):
@@ -432,36 +441,24 @@ defineWriteInstance inm class = do
 deriveWriteI : Name → Name → TC ⊤
 deriveWriteI iname typ = (declareWriteInstance iname typ) >> (defineWriteInstance iname typ)
 
-record Test' : Set where
+record Test' (A B : Set) : Set where
   field
     a : ℕ
     b : ℕ
-    
-g : Precedence → Test' → List Char → List Char
+    c : A
+
+data Test'' {A B : Set} (C : ℕ): Set where
+  a : A → ℕ → Test'' C
+
+g : {A B : Set} →  {{ Write A }} → Precedence → Test' A B  → List Char → List Char
 g = deriveWriteDef Test'
 
-test' : Test'
+test' : Test' ℕ ℕ
 test' .Test'.a = 5
 test' .Test'.b = 99
+test' .Test'.c = 101
+
+-- test'' : Test'' {A = ℕ} {B = ℕ} 5
+-- test'' = a 1 2
 f : String
 f = fromList (g unrelated test' [])
-
-{-
-λ { prec (a _ - _ - _) str
-      → concat
-        (toList " a " ∷
-         toList "(" ∷
-         .Write.writesPrecList prec _ (toList ")") ∷
-         concat
-         (toList " - " ∷
-          toList "(" ∷
-          .Write.writesPrecList prec _ (toList ")") ∷
-          concat
-          (toList " - " ∷
-           toList "(" ∷ .Write.writesPrecList prec _ (toList ")") ∷ [] ∷ [])
-          ∷ [])
-         ∷ [])
-  ; prec a' str → unqualify (toList "Text.Write.Deriving.Test.a'")
-  ; prec a'' str → unqualify (toList "Text.Write.Deriving.Test.a''")
-  }
--}
