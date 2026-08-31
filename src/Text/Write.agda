@@ -53,7 +53,7 @@ record Write (A : Set a) :  Set a where
 -- the string represents the result of calling `write` on an inner
 -- operator/function whose precedence is lower than or equal to
 -- the calling operator/function
-writeSurround : Char → Char → Precedence → Precedence → List Char → List Char
+writeSurround : A → A → Precedence → Precedence → List A → List A
 writeSurround lbrac rbrac callerPrec calleePrec str with (calleePrec ≤ᵇ callerPrec)
 ... | false = str
 ... | true = lbrac ∷ (str ++ [ rbrac ])
