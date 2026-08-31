@@ -12,7 +12,6 @@ open import Data.Nat.Base using (ℕ)
 
 module Text.Pretty (width : ℕ) where
 
-open import Agda.Builtin.Reflection using (Precedence) public
 import Level
 open import Data.Char.Base using (Char)
 open import Data.List.Base
@@ -22,6 +21,7 @@ open import Data.Maybe.Base using (maybe′)
 open import Data.Product.Base using (uncurry)
 open import Data.String.Base using (String; fromList; replicate)
 open import Function.Base using (_∘_; _∘′_; _$_)
+open import Reflection.AST.Fixity using (Precedence) public
 
 open import Effect.Monad using (RawMonad)
 import Data.List.Effectful as List
