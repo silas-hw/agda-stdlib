@@ -75,12 +75,12 @@ instance
       elemsWrite : {{ Write A }} → List A → List Char
       elemsWrite [] = toList "[]"
       elemsWrite (x ∷ xs) = writesPrecList (related 5.0) x (' ' ∷ '∷' ∷ ' ' ∷ elemsWrite xs)
-      
+
 private
   test[ℕ] : (write (5 ∷ 2 ∷ 12 ∷ 42 ∷ [])) ≡
                   "(5 ∷ 2 ∷ 12 ∷ 42 ∷ [])"
-  test[ℕ] = refl 
+  test[ℕ] = refl
 
   test[[ℕ]] : (write ((1 ∷ 2 ∷ 3 ∷ []) ∷ (99 ∷ 88 ∷ 77 ∷ []) ∷ [])) ≡
                     "((1 ∷ 2 ∷ 3 ∷ []) ∷ (99 ∷ 88 ∷ 77 ∷ []) ∷ [])"
-  test[[ℕ]] = refl 
+  test[[ℕ]] = refl
