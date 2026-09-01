@@ -16,7 +16,7 @@ module Text.Write.Deriving where
 
 open import Data.Bool.Base using (Bool; false; true; if_then_else_)
 open import Data.Char.Properties using (_≡?_)
-open import Data.List.Base using (_∷_; []; [_]; List; concat; _++_; zip; wordsBy; length; map; drop)
+open import Data.List.Base using (_∷_; []; [_]; List; concat; _++_; zip; wordsBy; length; map; drop; reverse)
 open import Data.List.Effectful
 open import Data.Maybe.Base using (just; nothing; fromMaybe; Maybe) renaming (_>>=_ to _>>=Maybe_)
 open import Data.Nat.Base using (ℕ; suc; _+_; ∣_-_∣′)
@@ -25,7 +25,7 @@ open TraversableM using (mapM)
 open import Data.String.Base using (toList; fromList; String) renaming (_++_ to _++s_)
 open import Data.Unit using (⊤)
 open import Data.Product.Base using (_×_; _,_; uncurry; proj₁; proj₂)
-open import Function.Base using (_∘_; _$_)
+open import Function.Base using (_∘_; _$_; case_of_)
 open import Reflection
 open import Reflection.AST.Show using (showName)
 open import Reflection.AST.Term using (Telescope; Clause; unknown; getName)
@@ -37,6 +37,13 @@ open import Relation.Binary.PropositionalEquality using (_≡_)
 open import Text.Write using (Write; Char; Precedence)
 
 open import Level using (Level; suc; zero)
+
+private
+  debugPrefix : String
+  debugPrefix = "text.write.deriving"
+
+  debugOut : ℕ → List ErrorPart → TC ⊤
+  debugOut = debugPrint debugPrefix
 
 data Test : Set where
   a_-_-_ : ℕ → ℕ → ℕ → Test
@@ -143,12 +150,47 @@ conArgTypes t = map (unArg ∘ proj₂) (getTel t)
 instanceArg : Arg Name
 instanceArg = arg (arg-info instance′ defaultModality) (quote Write)
 
--- Derive the telescope for the type of an instance,
+
+-- Derive the telescope for the type of an instance, along with the deBruijin indices
+-- of arguments needed for the instance type
 --
 -- e.g. for Write List this returns
---      {a : Level} {A : Set a} {{ Write A }}
-instanceTel : Name → Name → TC Telescope
+--      {a : Level} {A : Set a} {{ Write A }} , 2 ∷ 1 ∷ []
+instanceTel : Name → Name → TC (Telescope × List (Arg Term))
 instanceTel cls inst = {!!}
+  where
+    first : {a b c : Level} {A : Set a} {B : Set b} {C : Set c} → (A → B) → A × C → B × C
+    first f (x , y) = f x , y
+
+    levelToIndex : ℕ → Arg ℕ → Arg Term
+    levelToIndex n (arg i x) = arg i (var ∣ n - ∣ x - 1 ∣′ ∣′ [])
+
+    levelsToIndices : ℕ → List (Arg ℕ) → List (Arg Term)
+    levelsToIndices n xs = reverse $ map (levelToIndex (n + length xs)) xs
+
+    -- TODO: move elsewhere, and figure out what weakening does
+    weaken : {a : Level} {A : Set a} → ℕ → A → A
+    weaken = {!!}
+
+    computeInstanceType : Name → ℕ → List (Arg ℕ) → Type → Maybe Term
+    computeInstanceType = {!!}
+    -- compute the telescope in an accumulator like fashion
+    -- instances are on the tail of the telescope, so are accumulated into a separate telescope and then 'wacked on'
+    -- the end
+    --
+    -- Name is the name of the class (e.g. Write)
+    -- ℕ how far down the telescope we are
+    -- List (Arg ℕ) holds the accumulated *levels* of arguments, converted into indices (Arg Term) at the end
+    -- Telescope 1 is the accumulated-into telescope of *instances*
+    -- Telescope 2 is the starting telescope of the instance type (e.g. that of List for Write (List A))
+    computeTel : Name → ℕ → List (Arg ℕ) → Telescope → Telescope → Telescope × List (Arg Term)
+    computeTel class n args acc [] = (reverse acc) , (levelsToIndices n args)
+    computeTel class n args acc ((nm , arg info x) ∷ tel) =
+      (first {!(x , hArg x) ∷_!}) $
+      case computeInstanceType class 0 [] (weaken 1 x)  of λ
+      { (just i) → computeTel class (1 + n) ((arg info n) ∷ args) {!!} tel
+      ; nothing → computeTel class (1 + n) ((arg info n) ∷ args) {!!} tel
+      }
 
 -- Derive the type of an instance for a given record type,
 -- prepending all required instances to the telescope
@@ -157,10 +199,10 @@ instanceTel cls inst = {!!}
 --      : {{ Write A }} → Write (List A)
 instanceType : Name → Name → TC Type
 instanceType cls inst = do
-  clsT ← getType cls
-  instT ← getType inst
-  tel ← instanceTel cls inst
-  pure (telToType tel {!!})
+  tel-args ← instanceTel cls inst
+  let tel = proj₁ tel-args
+      args = proj₂ tel-args
+  pure (telToType tel (def cls [ (vArg (def inst args)) ]))
 
 telStr : Telescope → List ErrorPart
 telStr [] = strErr "[]" ∷ []
@@ -373,12 +415,12 @@ computeAuxWrite (record-type c fs) = do
   t ← getType c
   let params = ∣ (piCount t) - (length fs) ∣′
       t' = weakenPi params t
-  -- typeError [ termErr (weakenPi params t) ]
+  debugOut 0 [ termErr (weakenPi params t) ]
   let tel = recTel t'
       pats = varPat 0 ∷ varPat 1 ∷ varPat 2 ∷ []
       body = recordTerm c fs
       clause = Clause.clause tel pats body
-  -- typeError [ termErr (pat-lam [ clause ] []) ]
+  debugOut 0 [ termErr (pat-lam [ clause ] []) ]
   pure [ clause ]
 computeAuxWrite (data-type p cs) = do
   ts ← mapM monadTCM getType cs
@@ -387,7 +429,7 @@ computeAuxWrite (data-type p cs) = do
   -- typeError [ strErr $ write p ]
   -- typeError (telsStr (map (drop p ∘ proj₁) tels))
   let clauses = (Data.List.Base.map (uncurry consClause) (zip cs tels))
-  -- typeError (termErr (pat-lam clauses []) ∷ [])
+  debugOut 0 (termErr (pat-lam clauses []) ∷ [])
   pure clauses
 {-# CATCHALL #-}
 computeAuxWrite _  = typeError (strErr "Write instances can only be derived for data and record types" ∷ [])
