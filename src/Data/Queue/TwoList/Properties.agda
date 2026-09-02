@@ -43,20 +43,6 @@ private
     A : Set a
     B : Set b
 
-  queue-back[] : ∀ {xs : List< A} → (Queue.back (queue xs [])) ≡ []
-  queue-back[] {xs = []} = refl
-  queue-back[] {xs = xs <: x} = refl
-
-  queue[]xs→back≡[] : ∀ {xs : List A} → (Queue.back (queue [] xs)) ≡ []
-  queue[]xs→back≡[] = refl
-
-  queue-front : ∀ {xs : List< A} → (Queue.front (queue xs [])) ≡ xs
-  queue-front {xs = []} = refl
-  queue-front {xs = xs <: x} = refl
-
-  queue[]xs→<xs : ∀ {xs : List A} → (Queue.front (queue [] xs)) ≡ (fromList> xs)
-  queue[]xs→<xs = refl
-
 ------------------------------------------------------------------------
 -- Properties of toList and fromList
 
@@ -79,6 +65,9 @@ toList-fromList {q = q} {xs = xs} q≈xs = begin
   toList (fromList xs) ≡⟨ toList-fromList' xs ⟩
   xs                   ∎
   where
+    queue[]xs→back≡[] : ∀ {xs : List A} → (Queue.back (queue [] xs)) ≡ []
+    queue[]xs→back≡[] = refl
+    
     toList-fromList' : ∀ (xs : List A) → toList (fromList xs) ≡ xs
     toList-fromList' xs = begin
       toList (fromList xs)                         ≡⟨⟩
@@ -118,6 +107,15 @@ toList-dequeue {q = mkQ (xs <: x) [] inv} = begin
   ((Queue.back (queue xs [])) ++ (toList> xs)) ++ [ x ] ≡⟨⟩
   ((Queue.back (queue xs [])) ++ (xs <>> [])) ++ [ x ]  ≡⟨ cong! (sym (queue-front {xs = xs})) ⟩
   ((Queue.back (queue xs [])) ++ (Queue.front (queue xs []) <>> [])) ++ [ x ] ∎
+
+  where
+    queue-front : ∀ {xs : List< A} → (Queue.front (queue xs [])) ≡ xs
+    queue-front {xs = []} = refl
+    queue-front {xs = xs <: x} = refl
+
+    queue-back[] : ∀ {xs : List< A} → (Queue.back (queue xs [])) ≡ []
+    queue-back[] {xs = []} = refl
+    queue-back[] {xs = xs <: x} = refl
 
 -- either xs empty, so Queue.back ≡ [], or xs is not, so Queue.back ≡ y ∷ ys
 toList-dequeue {q = mkQ ([] <: x) (y ∷ ys) inv} = sym (begin
