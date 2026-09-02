@@ -67,7 +67,7 @@ toList-fromList {q = q} {xs = xs} q≈xs = begin
   where
     queue[]xs→back≡[] : ∀ {xs : List A} → (Queue.back (queue [] xs)) ≡ []
     queue[]xs→back≡[] = refl
-    
+
     toList-fromList' : ∀ (xs : List A) → toList (fromList xs) ≡ xs
     toList-fromList' xs = begin
       toList (fromList xs)                         ≡⟨⟩

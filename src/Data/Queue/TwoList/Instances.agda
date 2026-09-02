@@ -1,7 +1,7 @@
 ------------------------------------------------------------------------
 -- The Agda standard library
 --
--- Instances of TwoLisQueue
+-- Instances of TwoList Queue
 ------------------------------------------------------------------------
 
 {-# OPTIONS --without-K --safe #-}
@@ -38,7 +38,7 @@ instance
 ------------------------------------------------------------------------
 -- TwoList Queue is a Queue!
 
--- for some reason, unless manually passing some implicits, other implicits remain
+-- NOTE: for some reason, unless manually passing some implicits, other implicits remain
 -- unsolved? This is also means that you can't assign fields with record syntax and
 -- have to use co-pattern matching. My knowledge of implicits isn't good enough to know
 -- why or if this indicates 'bad ergonomics'
