@@ -87,3 +87,27 @@ instance
 string-not-ℕ : (write (s (s (s (s (z)))))) ≡
                       "s (s (s (s (z))))"
 string-not-ℕ = refl
+
+-- Instances can also be derived using Reflection, provided by
+open import Text.Write.Deriving using (deriveWrite)
+
+data not-List (A : Set) : Set where
+  empty : not-List A
+  _cons_ : A → not-List A → not-List A
+
+-- unquoteDecl has to be used to allow the function to introduce new definitions and declarations
+-- and the type for which Write is being derived for must be quoted
+instance
+  unquoteDecl not-ListWrite = deriveWrite not-ListWrite (quote not-List)
+
+string-not-List[not-ℕ] : String
+string-not-List[not-ℕ] = write (z cons empty)
+
+-- Or, if you want, you can use the syntax x derives Write as y:
+
+data not-Maybe (A : Set) : Set where
+  void : not-Maybe A
+  something : A → not-Maybe A
+
+instance
+  unquoteDecl not-MaybeWrite = (quote not-Maybe) derives Write as not-MaybeWrite
