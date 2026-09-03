@@ -44,7 +44,8 @@ instance
 -- why or if this indicates 'bad ergonomics'
 
 instance
-  TwoList-IsQueue : IsQueue {a} TwoList-RawQueue
+  TwoList-IsQueue : IsQueue {a} Queue
+  TwoList-IsQueue .IsQueue.rawQ = TwoList-RawQueue
   TwoList-IsQueue .IsQueue.isEquivalence = ≈-isEquivalence
   TwoList-IsQueue .IsQueue.≈-resp-Empty {x = x} {y} = ≈-resp-Empty {x = x} {y = y}
   TwoList-IsQueue .IsQueue.≈-=[toList]⇒-≡ {x = x} {y} = ≈-=[toList]⇒-≡ {x = x} {y = y}

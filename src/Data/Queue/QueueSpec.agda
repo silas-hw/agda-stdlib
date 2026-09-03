@@ -64,7 +64,11 @@ record RawQueue (Q : Set a → Set a) : Set (suc a) where
 -- IsQueue bundles RawQueue with proofs of a Queues correctness,
 -- such as enqueue adding 1 to the Queue's size
 -- NOTE: not finished adding everything!
-record IsQueue {Q : Set a → Set a} (rawQ : RawQueue Q) : Set (suc a) where
+-- Should name be Queue or IsQueue?
+record IsQueue (Q : Set a → Set a) : Set (suc a) where
+
+  field
+    rawQ            : RawQueue Q
 
   open RawQueue rawQ
 
