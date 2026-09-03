@@ -35,12 +35,12 @@ open import Reflection.TCM
 open import Reflection.TCM.Effectful using () renaming (monad to monadTCM)
 open import Relation.Binary.PropositionalEquality using (_≡_)
 open import Text.Write using (Write; Char; Precedence)
+open import Level using (Level; suc; zero)
 
 open Clause
 open Pattern
 open Sort
-
-open import Level using (Level; suc; zero)
+open Write {{...}}
 
 private
   debugPrefix : String
@@ -213,19 +213,6 @@ telToType : Telescope → Type → Type
 telToType [] core = core
 telToType ((nm , x) ∷ tel) core = pi x (abs nm (telToType tel core))
 
--- Return a list of all types that appear in a list of constructors in order of appearance
-conArgTypes : Type → List Type
-conArgTypes t = map (unArg ∘ proj₂) (getTel t)
-
-instanceArg : Arg Name
-instanceArg = arg (arg-info instance′ defaultModality) (quote Write)
-
-telStr : Telescope → List ErrorPart
-telStr [] = strErr "[]" ∷ []
-telStr ((nm , arg i t) ∷ xs) = strErr nm ∷ termErr t ∷ (telStr xs)
-
--- BUG: variables / deBruijn indices for the instances are wrong
-
 -- Derive the telescope for the type of an instance, along with the deBruijin indices
 -- of arguments needed for the instance type
 --
@@ -274,16 +261,6 @@ instanceTel cls inst = do
       ; nothing → computeTel class (1 + n) ((arg info n) ∷ args) (weakenTel 1 acc) tel
       }
 
-open Write {{...}}
-
-instance
-  ArgTermWrite : Write (Arg Term)
-  ArgTermWrite .Write.writesPrecList prec (arg i x) str = toList (showTerm x) ++ str
-
-open import Data.List.Instances
-
--- NOTE: args are all 1 + what they need to be?
-
 -- Derive the type of an instance for a given record type,
 -- prepending all required instances to the telescope
 --
@@ -292,24 +269,14 @@ open import Data.List.Instances
 instanceType : Name → Name → TC Type
 instanceType cls inst = do
   tel-args ← instanceTel cls inst
+
   let tel = proj₁ tel-args
       args = proj₂ tel-args
-  -- typeError {A = Type} [ strErr $ write args ]
-  -- typeError {A = Type} $ telStr tel
-  -- typeError {A = Type} [ termErr $ (telToType tel (def cls [ (vArg (def inst args)) ])) ]
+
   pure (telToType tel (def cls [ (vArg (def inst args)) ]))
 
-telsStr : List Telescope → List ErrorPart
-telsStr tels = concat (map telStr tels)
-
-vrv :  ℕ → List (Arg Term) → Arg Term
-vrv n args = vArg (var n args)
-
-vri : ℕ → Arg Term
-vri n = arg (arg-info instance′ (modality relevant quantity-0)) (var n [])
-
-vrv' : ℕ → Arg Term
-vrv' n = vArg (var n [])
+varArg : ℕ → Arg Term
+varArg n = vArg (var n [])
 
 ------------------------------------------------------------------------
 -- Machinery specific to Write
@@ -347,10 +314,9 @@ writeArgs nm = do
   tel,args ← instanceTel (quote Write) nm
   pure $ proj₂ tel,args
 
--- TODO: doc comment can be better
+-- TODO: doc comment can be better?
 -- given the telescope for a constructor, produce the whole telescope for
 -- its clause
--- Precedence → A → List Char
 conTel : Telescope → Telescope
 conTel tel =  ("str" , (vArg (quoteTerm (List Char)))) ∷ (tel ++ ("prec" , (vArg (quoteTerm Precedence))) ∷ [])
 
@@ -364,12 +330,6 @@ recTel rec = do
 ------------------------------------------------------------------------
 -- Derive macro for Write
 
--- NOTE: lots of experimenting
-
-next : List (List Char) → (List Char) × (List (List Char))
-next [] = [] , []
-next (x ∷ xs) = x , xs
-
 -- Take a list of terms and turn it into a term of a list of said terms
 quoteList : List Term → Term
 quoteList [] = con (quote List.[]) []
@@ -379,9 +339,7 @@ padSep : List Char → List Char
 padSep [] = []
 padSep xs@(_ ∷ _) = ' ' ∷ xs ++ [ ' ' ]
 
--- TODO: probably a better interface/function than this
---         len ≥ length (tel)
---         Between values    Inst Map    num vals  tel
+-- TODO: probably a better interface/function than this?
 telWrite' : List (List Char) → ℕ → Telescope → List Term
 telWrite' seps len [] = [ con (quote List.[]) [] ]
 telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
@@ -389,6 +347,9 @@ telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
                                        (prec ∷ conVal ∷ vArg suff ∷ [])) ∷
                                        (telWrite' seps' len xs)
           where
+            next : List (List Char) → (List Char) × (List (List Char))
+            next [] = [] , []
+            next (x ∷ xs) = x , xs
 
             sepSeps : List Char × (List (List Char))
             sepSeps = next seps
@@ -398,7 +359,7 @@ telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
 
             -- there must be a better way! maybe we should use strings
             sepTerm : Term
-            sepTerm = def (quote toList) ((vArg (lit (string (fromList sep)))) ∷ [])
+            sepTerm = def (quote toList) ((vArg (lit (string ( fromList sep)))) ∷ [])
 
             seps' : List (List Char)
             seps' = proj₂ sepSeps
@@ -424,8 +385,14 @@ telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
             prec : Arg Term
             prec = vArg $ var 0 []
 
-telWrite : List (List Char) → ℕ → Telescope → Term
-telWrite seps n tel = def (quote concat) [ (vArg (quoteList (telWrite' seps n tel))) ]
+-- Given a list of mixfix seperators and the telescope of a constructor, produce the
+-- function body for its Write instance.
+--
+-- In the case the constructor is not mixfix, the seperator list should be a singleton
+-- containing just the constructor name. Each seperator part is interleaved
+-- between written values.
+telWrite : List (List Char) → Telescope → Term
+telWrite seps tel = def (quote concat) [ (vArg (quoteList (telWrite' seps (length tel) tel))) ]
 
 varPat : ℕ → Arg Pattern
 varPat n = vArg (Pattern.var n)
@@ -443,22 +410,22 @@ conNameTerm nm = def (quote unqualify) (vArg (def (quote toList) (nmLit ∷ []))
     nmLit : Arg Term
     nmLit = vArg (lit (string (showName nm)))
 
--- get a list of constructor seperators
+-- Get a list of constructor seperators
 -- with an additional empty seperator
--- if the constructor mixfix starts with a _
+-- if the constructor is mixfix and starts with a _
 conSeps : List Char → List (List Char)
 conSeps [] = []
 conSeps ('_' ∷ str) = [] ∷ conSeps str
 conSeps str@(_ ∷ _) = wordsBy (_≡?_ '_') str
 
--- clause when the constructor of a data type is empty
+-- clause for data-types when the constructor is empty
 emptyCons : Name → Clause
 emptyCons nm = Clause.clause (conTel []) ((varPat 0) ∷ conPat ∷ ((varPat 1) ∷ [])) (conNameTerm nm)
   where
     conPat : Arg Pattern
     conPat = vArg (Pattern.con nm [])
 
--- derive the clause for a single constructor
+-- derive the clause for a single constructor of a data-type
 consClause : Name → Telescope → Clause
 consClause nm [] = emptyCons nm
 consClause nm tel@(_ ∷ _) = Clause.clause (conTel tel) (varPat 0 ∷ conPat ∷ strPat ∷ []) writeTerm
@@ -479,24 +446,25 @@ consClause nm tel@(_ ∷ _) = Clause.clause (conTel tel) (varPat 0 ∷ conPat �
     nmStr = unqualify (toList (showName nm))
 
     writeTerm : Term
-    writeTerm = telWrite (conSeps nmStr) telLen tel
+    writeTerm = telWrite (conSeps nmStr) tel
 
--- Prec → Rec → LC → LC
+-- Output a list of terms that each produce part of the output
+-- for a record-type
 recordOutputs : Name → List (Arg Name) → List Term
 recordOutputs nm [] = [ (quoteTerm (toList "}")) ]
 recordOutputs nm (x ∷ fs) = def (quote toList) [ vArg (lit (string fieldName)) ] ∷
                             (quoteTerm (toList " = ")) ∷
-                            def (quote writesPrecList) (vrv' 0 ∷ fieldArg ∷ vrv' 2 ∷ []) ∷
+                            def (quote writesPrecList) (varArg 0 ∷ fieldArg ∷ varArg 2 ∷ []) ∷
                             (quoteTerm (toList "; ")) ∷
                             recordOutputs nm fs
   where
     fieldArg : Arg Term
-    fieldArg = vArg (def (unArg x) [ vrv' 1 ])
+    fieldArg = vArg (def (unArg x) [ varArg 1 ])
 
     fieldName : String
     fieldName = fromList (unqualify (toList (showName (unArg x))))
 
-
+-- Produce the term for the derived Write instance for record-types
 recordTerm : Name → List (Arg Name) → Term
 recordTerm nm fs = def (quote concat) [
                    (vArg (quoteList (prefix ∷ outs))) ]
@@ -518,40 +486,25 @@ piCount (pi c (abs s x)) = ℕ.suc (piCount x)
 {-# CATCHALL #-}
 piCount _ = 0
 
--- cs in data-type contains actual constructor names
--- 'name' in data-cons is just name of data type itself
+-- derive the body of the auxiliary function of a Write instance
 computeAuxWrite : Name → Definition → TC (List Clause)
 computeAuxWrite nm (record-type c fs) = do
   t ← getType c
   let params = ∣ (piCount t) - (length fs) ∣′
       t' = weakenPi params t
-  -- typeError [ termErr (weakenPi params t) ]
   tel ← recTel nm
-  -- typeError $ telStr tel
   let pats = varPat 0 ∷ varPat 1 ∷ varPat 2 ∷ []
       body = recordTerm c fs
       clause = Clause.clause tel pats body
-  -- typeError [ termErr (pat-lam [ clause ] []) ]
   pure [ clause ]
 computeAuxWrite nm (data-type p cs) = do
   ts ← mapM monadTCM getType cs
-  -- get telescope of each constructor with parameters removed
-
   let tels = map (drop p ∘ proj₁ ∘ telView) ts
-  -- typeError [ strErr $ write p ]
-
   let clauses = (Data.List.Base.map (uncurry consClause) (zip cs tels))
   debugOut 0 (termErr (pat-lam clauses []) ∷ [])
   pure clauses
 {-# CATCHALL #-}
 computeAuxWrite _ _  = typeError (strErr "Write instances can only be derived for data and record types" ∷ [])
-
-macro
-  deriveWriteDef : Name → Term → TC ⊤
-  deriveWriteDef nm met = do
-    d ← getDefinition nm
-    writeClauses ← computeAuxWrite nm d
-    unify met (pat-lam writeClauses [])
 
 -- Declare a Write instance with a given name for a given
 -- type.
@@ -581,45 +534,43 @@ defineWriteInstance inm class = do
   ft ← writeAuxType class
 
   declareDef (vArg fnm) ft
-
   defineFun inm (Clause.clause [] [] (con (quote Text.Write.mkWrite) [ vArg (def fnm []) ]) ∷ [])
 
   classDef ← getDefinition class
-
   clauses ← computeAuxWrite class classDef
-
-  -- typeError [ termErr (pat-lam clauses []) ]
   defineFun fnm clauses
 
   pure _
 
 -- Usage (example for List):
 --  unquoteDecl ListWrite = deriveWriteI ListWrite (quote List)
-deriveWriteI : Name → Name → TC ⊤
-deriveWriteI iname typ = (declareWriteInstance iname typ) >> (defineWriteInstance iname typ)
+deriveWrite : Name → Name → TC ⊤
+deriveWrite iname typ = (declareWriteInstance iname typ) >> (defineWriteInstance iname typ)
 
-record Test' (A B : Set) : Set where
-  field
-    a : ℕ
-    b : ℕ
-    c : A
+syntax deriveWrite x y = y derives Write as x
 
-data Test'' {A : Set} (C : ℕ): Set where
-  a : A → ℕ → Test'' C
+-- some example usage
+private
+  record Test' (A B : Set) : Set where
+    field
+      a : ℕ
+      b : ℕ
+      c : A
 
-instance
-  unquoteDecl Test'Write = deriveWriteI Test'Write (quote Test')
-  unquoteDecl Test''Write = deriveWriteI Test''Write (quote Test'')
+  data Test'' {A : Set} (C : ℕ): Set where
+    a : A → ℕ → Test'' C
 
-test' : Test' ℕ ℕ
-test' .Test'.a = 5
-test' .Test'.b = 99
-test' .Test'.c = 101
+  instance
+    unquoteDecl Test'Write = (quote Test') derives Write as Test'Write
+    unquoteDecl Test''Write = (quote Test'') derives Write as Test''Write
 
-test'' : Test'' 5
-test'' = a 0 2
+  test' : Test' ℕ ℕ
+  test' .Test'.a = 5
+  test' .Test'.b = 99
+  test' .Test'.c = 101
 
--- test'' : Test'' {A = ℕ} {B = ℕ} 5
--- test'' = a 1 2
-f : String
-f = write test''
+  test'' : Test'' 5
+  test'' = a 0 2
+
+  f : String
+  f = write test''
