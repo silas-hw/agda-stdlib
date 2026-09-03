@@ -18,7 +18,7 @@ open import Data.String.Base using (String) public
 open import Data.String.Base using (fromList; toList)
 open import Function.Base using (_∘_; const; _$_)
 open import Level using (Level)
-open import Reflection.AST.Fixity
+open import Reflection.AST.Fixity using (Precedence; _≤ᵇ_; _≤_) public
 
 private
   variable
