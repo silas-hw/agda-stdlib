@@ -146,6 +146,9 @@ private
   variable
     a : Level.Level
 
+-- The output of a Pretty instance is assumed
+-- to only ever be for humans, whereas Write (Text.Write)
+-- is designed to produce parseable output
 record Pretty (A : Set a) : Set a where
   field
     pPrintPrec : Precedence → A → Doc
