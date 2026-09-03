@@ -19,7 +19,7 @@ open import Data.Char.Properties using (_≡?_)
 open import Data.List.Base using (_∷_; []; [_]; List; concat; _++_; zip; wordsBy; length; map; drop; reverse)
 open import Data.List.Effectful
 open import Data.Maybe.Base using (just; nothing; fromMaybe; Maybe) renaming (_>>=_ to _>>=Maybe_)
-open import Data.Nat.Base using (ℕ; suc; _+_; ∣_-_∣′)
+open import Data.Nat.Base using (ℕ; suc; _+_; ∣_-_∣′; _∸_; _<ᵇ_)
 open import Data.Nat.Instances
 open TraversableM using (mapM)
 open import Data.String.Base using (toList; fromList; String) renaming (_++_ to _++s_)
@@ -28,13 +28,17 @@ open import Data.Product.Base using (_×_; _,_; uncurry; proj₁; proj₂)
 open import Function.Base using (_∘_; _$_; case_of_)
 open import Reflection
 open import Reflection.AST.Show using (showName)
-open import Reflection.AST.Term using (Telescope; Clause; unknown; getName)
+open import Reflection.AST.Term using (Telescope; Clause; unknown; getName; Sort)
 open import Reflection.AST.Name using (_≡ᵇ_)
 open import Reflection.AST.Argument using (vArg; hArg; iArg; unArg)
 open import Reflection.TCM
 open import Reflection.TCM.Effectful using () renaming (monad to monadTCM)
 open import Relation.Binary.PropositionalEquality using (_≡_)
 open import Text.Write using (Write; Char; Precedence)
+
+open Clause
+open Pattern
+open Sort
 
 open import Level using (Level; suc; zero)
 
@@ -44,11 +48,6 @@ private
 
   debugOut : ℕ → List ErrorPart → TC ⊤
   debugOut = debugPrint debugPrefix
-
-data Test : Set where
-  a_-_-_ : ℕ → ℕ → ℕ → Test
-  a' : Test
-  a'' : Test
 
 {-
 Should this be placed in Tactic.DerivingWrite?
@@ -123,6 +122,76 @@ unqualify : List Char → List Char
 unqualify str = last str (wordsBy (_≡?_ '.') str)
 
 ------------------------------------------------------------------------
+-- Weakening
+
+-- taken directly from agda-prelude
+private
+  Wk : Set → Set
+  Wk A = ℕ → ℕ → A → A
+
+  wkVar : Wk ℕ
+  wkVar lo k x = if x <ᵇ lo then x else x + k
+
+  wkArgs    : Wk (List (Arg Term))
+  wkArg     : Wk (Arg Term)
+  wkSort    : Wk Sort
+  wkClauses : Wk (List Clause)
+  wkClause  : Wk Clause
+  wkAbsTerm : Wk (Abs Term)
+
+  wk : Wk Term
+  wk lo k (var x args)  = var (wkVar lo k x) (wkArgs lo k args)
+  wk lo k (con c args)  = con c (wkArgs lo k args)
+  wk lo k (def f args)  = def f (wkArgs lo k args)
+  wk lo k (meta x args) = meta x (wkArgs lo k args)
+  wk lo k (lam v t)     = lam v (wkAbsTerm lo k t)
+  wk lo k (pi a b)      = pi (wkArg lo k a) (wkAbsTerm lo k b)
+  wk lo k (agda-sort s) = agda-sort (wkSort lo k s)
+  wk lo k (lit l)       = lit l
+  wk lo k (pat-lam cs args) = pat-lam (wkClauses lo k cs) (wkArgs lo k args)
+  wk lo k unknown       = unknown
+
+  wkAbsTerm lo k (abs s t)   = abs s (wk (ℕ.suc lo) k t)
+  wkArgs    lo k []          = []
+  wkArgs    lo k (x ∷ args)  = wkArg lo k x ∷ wkArgs lo k args
+  wkArg     lo k (arg i v)   = arg i (wk lo k v)
+  wkSort    lo k (set t)     = set (wk lo k t)
+  wkSort    lo k (lit n)     = lit n
+  wkSort    lo k (prop t)    = prop (wk lo k t)
+  wkSort    lo k (propLit n) = propLit n
+  wkSort    lo k (inf n)     = inf n
+  wkSort    lo k unknown     = unknown
+
+  wkClauses lo k [] = []
+  wkClauses lo k (c ∷ cs) = wkClause lo k c ∷ wkClauses lo k cs
+
+  wkClause lo k (clause tel ps b)      = clause tel ps (wk (lo + length tel) k b)
+  wkClause lo k (absurd-clause tel ps) = absurd-clause tel ps
+
+  wkPat    : Wk Pattern
+  wkPatArg : Wk (Arg Pattern)
+  wkPats   : Wk (List (Arg Pattern))
+
+  wkPat    lo k (con c ps) = con c (wkPats lo k ps)
+  wkPat    lo k (dot t)    = dot (wk lo k t)
+  wkPat    lo k (var x)    = var (wkVar lo k x)
+  wkPat    lo k (lit l)    = lit l
+  wkPat    lo k (proj f)   = proj f
+  wkPat    lo k (absurd x) = absurd (wkVar lo k x)
+  wkPatArg lo k (arg i p)  = arg i (wkPat lo k p)
+  wkPats   lo k []         = []
+  wkPats   lo k (p ∷ ps)   = wkPatArg lo k p ∷ wkPats lo k ps
+
+  weakenTerm : ℕ → Term → Term
+  weakenTerm = wk 0
+
+  wkTel : Wk Telescope
+  wkTel lo k = map λ nm,arg → (proj₁ nm,arg) , (wkArg lo k (proj₂ nm,arg))
+
+  weakenTel : ℕ → Telescope → Telescope
+  weakenTel = wkTel 0
+
+------------------------------------------------------------------------
 -- Machinery for deriving things
 
 telView : Type → Telescope × Type
@@ -141,7 +210,8 @@ getCore = proj₂ ∘ telView
 
 -- Construct a Type out of a Telescope and Core Type
 telToType : Telescope → Type → Type
-telToType tel core = {!!}
+telToType [] core = core
+telToType ((nm , x) ∷ tel) core = pi x (abs nm (telToType tel core))
 
 -- Return a list of all types that appear in a list of constructors in order of appearance
 conArgTypes : Type → List Type
@@ -150,6 +220,11 @@ conArgTypes t = map (unArg ∘ proj₂) (getTel t)
 instanceArg : Arg Name
 instanceArg = arg (arg-info instance′ defaultModality) (quote Write)
 
+telStr : Telescope → List ErrorPart
+telStr [] = strErr "[]" ∷ []
+telStr ((nm , arg i t) ∷ xs) = strErr nm ∷ termErr t ∷ (telStr xs)
+
+-- BUG: variables / deBruijn indices for the instances are wrong
 
 -- Derive the telescope for the type of an instance, along with the deBruijin indices
 -- of arguments needed for the instance type
@@ -157,23 +232,30 @@ instanceArg = arg (arg-info instance′ defaultModality) (quote Write)
 -- e.g. for Write List this returns
 --      {a : Level} {A : Set a} {{ Write A }} , 2 ∷ 1 ∷ []
 instanceTel : Name → Name → TC (Telescope × List (Arg Term))
-instanceTel cls inst = {!!}
+instanceTel cls inst = do
+  t ← getType inst
+  let tel = proj₁ ∘ telView $ t
+  pure (computeTel cls 0 [] [] tel)
   where
     first : {a b c : Level} {A : Set a} {B : Set b} {C : Set c} → (A → B) → A × C → B × C
     first f (x , y) = f x , y
 
     levelToIndex : ℕ → Arg ℕ → Arg Term
-    levelToIndex n (arg i x) = arg i (var ∣ n - ∣ x - 1 ∣′ ∣′ [])
+    levelToIndex n (arg i x) = arg i (var (n ∸ x ∸ 1) [])
 
     levelsToIndices : ℕ → List (Arg ℕ) → List (Arg Term)
-    levelsToIndices n xs = reverse $ map (levelToIndex (n + length xs)) xs
+    levelsToIndices n xs = reverse $ map (levelToIndex n) xs
 
-    -- TODO: move elsewhere, and figure out what weakening does
-    weaken : {a : Level} {A : Set a} → ℕ → A → A
-    weaken = {!!}
-
+    -- if it's a sort or pi, then we need an instance in the telescope
     computeInstanceType : Name → ℕ → List (Arg ℕ) → Type → Maybe Term
-    computeInstanceType = {!!}
+    computeInstanceType class n xs (agda-sort _) =
+      just (def class (vArg (var n (levelsToIndices n xs)) ∷ []))
+    computeInstanceType class n xs (pi (arg info a) (abs s b)) =
+      computeInstanceType class (ℕ.suc n) ((arg info n) ∷ xs) b >>=Maybe
+      λ y → just (pi (hArg a) (abs s y))
+    {-# CATCHALL #-}
+    computeInstanceType _ _ _ _ = nothing
+
     -- compute the telescope in an accumulator like fashion
     -- instances are on the tail of the telescope, so are accumulated into a separate telescope and then 'wacked on'
     -- the end
@@ -184,13 +266,23 @@ instanceTel cls inst = {!!}
     -- Telescope 1 is the accumulated-into telescope of *instances*
     -- Telescope 2 is the starting telescope of the instance type (e.g. that of List for Write (List A))
     computeTel : Name → ℕ → List (Arg ℕ) → Telescope → Telescope → Telescope × List (Arg Term)
-    computeTel class n args acc [] = (reverse acc) , (levelsToIndices n args)
+    computeTel class n args acc [] = reverse acc , (levelsToIndices (n + length acc) args)
     computeTel class n args acc ((nm , arg info x) ∷ tel) =
-      (first {!(x , hArg x) ∷_!}) $
-      case computeInstanceType class 0 [] (weaken 1 x)  of λ
-      { (just i) → computeTel class (1 + n) ((arg info n) ∷ args) {!!} tel
-      ; nothing → computeTel class (1 + n) ((arg info n) ∷ args) {!!} tel
+      (first ((nm , hArg x) ∷_)) $
+      case computeInstanceType class 0 [] (weakenTerm 1 x)  of λ
+      { (just i) → computeTel class (1 + n) ((arg info n) ∷ args) (("_" , (iArg (weakenTerm (length acc) i))) ∷ (weakenTel 1 acc)) tel
+      ; nothing → computeTel class (1 + n) ((arg info n) ∷ args) (weakenTel 1 acc) tel
       }
+
+open Write {{...}}
+
+instance
+  ArgTermWrite : Write (Arg Term)
+  ArgTermWrite .Write.writesPrecList prec (arg i x) str = toList (showTerm x) ++ str
+
+open import Data.List.Instances
+
+-- NOTE: args are all 1 + what they need to be?
 
 -- Derive the type of an instance for a given record type,
 -- prepending all required instances to the telescope
@@ -202,11 +294,10 @@ instanceType cls inst = do
   tel-args ← instanceTel cls inst
   let tel = proj₁ tel-args
       args = proj₂ tel-args
+  -- typeError {A = Type} [ strErr $ write args ]
+  -- typeError {A = Type} $ telStr tel
+  -- typeError {A = Type} [ termErr $ (telToType tel (def cls [ (vArg (def inst args)) ])) ]
   pure (telToType tel (def cls [ (vArg (def inst args)) ]))
-
-telStr : Telescope → List ErrorPart
-telStr [] = strErr "[]" ∷ []
-telStr ((nm , arg i t) ∷ xs) = strErr nm ∷ termErr t ∷ (telStr xs)
 
 telsStr : List Telescope → List ErrorPart
 telsStr tels = concat (map telStr tels)
@@ -229,13 +320,32 @@ vrv' n = vArg (var n [])
 -- Example: writeAuxType List
 --          ↦ {a : Set} {A : Set a} → {{ Write A }} → Precedence → List A → List Char → List Char
 writeAuxType : Name → TC Type
-writeAuxType nm = {!!}
+writeAuxType nm = do
+  tel,args ← instanceTel (quote Write) nm
+  let tel = proj₁ tel,args
+      args = wkArgs 0 1 $ proj₂ tel,args
+  pure (telToType tel (core $ vArg (def nm args)))
+
+  where
+    listChar : Type
+    listChar = def (quote List) [ (vArg (def (quote Char) [])) ]
+
+    prec : Arg Type
+    prec = vArg (def (quote Precedence) [])
+
+    core : Arg Type → Type
+    core nmArg = pi prec (abs " " (pi nmArg (abs " " (pi (vArg listChar) (abs " " listChar)))))
 
 -- Produce the type of a Write instance for a given class.
 --
 -- Example: writeType List ↦ {a : Set} {A : Set a} → {{ Write A }} → Write (List A)
 writeType : Name → TC Type
-writeType nm = {!!}
+writeType nm = instanceType (quote Write) nm
+
+writeArgs : Name → TC (List (Arg Term))
+writeArgs nm = do
+  tel,args ← instanceTel (quote Write) nm
+  pure $ proj₂ tel,args
 
 -- TODO: doc comment can be better
 -- given the telescope for a constructor, produce the whole telescope for
@@ -246,8 +356,10 @@ conTel tel =  ("str" , (vArg (quoteTerm (List Char)))) ∷ (tel ++ ("prec" , (vA
 
 -- The (tail of the) Telescope for the clause of the auxiliary write function for Records.
 -- i.e. Precedence → Record → List Char
-recTel : Type → Telescope
-recTel rec = conTel [ ("rec" , (vArg rec)) ]
+recTel : Name → TC Telescope
+recTel rec = do
+  args ← writeArgs rec
+  pure $ conTel [ ("rec" , vArg (def rec args)) ]
 
 ------------------------------------------------------------------------
 -- Derive macro for Write
@@ -266,8 +378,6 @@ quoteList (x ∷ xs) = con (quote _∷_) (vArg x ∷ [ (vArg (quoteList xs)) ])
 padSep : List Char → List Char
 padSep [] = []
 padSep xs@(_ ∷ _) = ' ' ∷ xs ++ [ ' ' ]
-
-open Write {{...}}
 
 -- TODO: probably a better interface/function than this
 --         len ≥ length (tel)
@@ -410,35 +520,37 @@ piCount _ = 0
 
 -- cs in data-type contains actual constructor names
 -- 'name' in data-cons is just name of data type itself
-computeAuxWrite : Definition → TC (List Clause)
-computeAuxWrite (record-type c fs) = do
+computeAuxWrite : Name → Definition → TC (List Clause)
+computeAuxWrite nm (record-type c fs) = do
   t ← getType c
   let params = ∣ (piCount t) - (length fs) ∣′
       t' = weakenPi params t
-  debugOut 0 [ termErr (weakenPi params t) ]
-  let tel = recTel t'
-      pats = varPat 0 ∷ varPat 1 ∷ varPat 2 ∷ []
+  -- typeError [ termErr (weakenPi params t) ]
+  tel ← recTel nm
+  -- typeError $ telStr tel
+  let pats = varPat 0 ∷ varPat 1 ∷ varPat 2 ∷ []
       body = recordTerm c fs
       clause = Clause.clause tel pats body
-  debugOut 0 [ termErr (pat-lam [ clause ] []) ]
+  -- typeError [ termErr (pat-lam [ clause ] []) ]
   pure [ clause ]
-computeAuxWrite (data-type p cs) = do
+computeAuxWrite nm (data-type p cs) = do
   ts ← mapM monadTCM getType cs
   -- get telescope of each constructor with parameters removed
+
   let tels = map (drop p ∘ proj₁ ∘ telView) ts
   -- typeError [ strErr $ write p ]
-  -- typeError (telsStr (map (drop p ∘ proj₁) tels))
+
   let clauses = (Data.List.Base.map (uncurry consClause) (zip cs tels))
   debugOut 0 (termErr (pat-lam clauses []) ∷ [])
   pure clauses
 {-# CATCHALL #-}
-computeAuxWrite _  = typeError (strErr "Write instances can only be derived for data and record types" ∷ [])
+computeAuxWrite _ _  = typeError (strErr "Write instances can only be derived for data and record types" ∷ [])
 
 macro
   deriveWriteDef : Name → Term → TC ⊤
   deriveWriteDef nm met = do
     d ← getDefinition nm
-    writeClauses ← computeAuxWrite d
+    writeClauses ← computeAuxWrite nm d
     unify met (pat-lam writeClauses [])
 
 -- Declare a Write instance with a given name for a given
@@ -473,7 +585,10 @@ defineWriteInstance inm class = do
   defineFun inm (Clause.clause [] [] (con (quote Text.Write.mkWrite) [ vArg (def fnm []) ]) ∷ [])
 
   classDef ← getDefinition class
-  clauses ← computeAuxWrite classDef
+
+  clauses ← computeAuxWrite class classDef
+
+  -- typeError [ termErr (pat-lam clauses []) ]
   defineFun fnm clauses
 
   pure _
@@ -489,18 +604,22 @@ record Test' (A B : Set) : Set where
     b : ℕ
     c : A
 
-data Test'' {A B : Set} (C : ℕ): Set where
+data Test'' {A : Set} (C : ℕ): Set where
   a : A → ℕ → Test'' C
 
-g : {A B : Set} →  {{ Write A }} → Precedence → Test' A B  → List Char → List Char
-g = deriveWriteDef Test'
+instance
+  unquoteDecl Test'Write = deriveWriteI Test'Write (quote Test')
+  unquoteDecl Test''Write = deriveWriteI Test''Write (quote Test'')
 
 test' : Test' ℕ ℕ
 test' .Test'.a = 5
 test' .Test'.b = 99
 test' .Test'.c = 101
 
+test'' : Test'' 5
+test'' = a 0 2
+
 -- test'' : Test'' {A = ℕ} {B = ℕ} 5
 -- test'' = a 1 2
 f : String
-f = fromList (g unrelated test' [])
+f = write test''
