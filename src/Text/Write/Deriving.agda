@@ -49,67 +49,10 @@ private
   debugOut : ℕ → List ErrorPart → TC ⊤
   debugOut = debugPrint debugPrefix
 
-{-
-Should this be placed in Tactic.DerivingWrite?
-
-For now, some notes on design:
-
-Should print syntactically correct Agda that can be read by
-an also derived Read instance.
-
-Steps:
-1. Check term is actually a data/record definition, if not throw typecheck error?
-2. Get all parameters and attach required instances to the resulting function type
-
-   only need instances for types within constructors, e.g.
-
-   data {a : Level} {A : Set} → MyData A : Set a where
-     c : A → A → MyData A
-
-   needs to have
-
-   {a : Level} {A : Set} {{ Write A }} → Write (List A)
-
-   NOT
-
-   {a : Level} {A : Set} {{ Write a }} {{ Write A }} → Write (List A)
-
-3. Create a pat-lam for the record field of Write, but use outer de Bruijn indices
-   to fetch write instances
-
-   When writing values of a constructor, recursively call write on them. For
-   other types, use a map of instances for de Bruijn indices. But for the current type
-   (in the case of induction), the name of the defined function must be used.
-
-   NOTE: map return an arg instead of a nat
-
-4. For data types, create a clause for each constructor and produce a pat-lam out of it
-
-OUTPUT:
-
-For records, print in record syntax (record { x = y, ... }), recursively
-   calling write on fields
-
-For data, get fixity of constructor and recursively call write, intertwining
-   parts of the constructors name in a way that properly aligns with fixity
-
-   (e.g. print x ∷ [] as "x ∷ []", not "_∷_ x []")
-
-Reflection notes:
-- Prelude has a lot of machinery that should be moved over
-- Should derive *own* type so we know the exact order things are in
-- WRONG
-- Clause takes telescope of arguments (i.e. the type of the given function without the return value)
-  AND a list of patterns applied to those arguments. If no pattern matching is applied, just the
-  deBruijin index within a var pattern should be given.
-- Pat lam for pattern matching, lam for normal
-- Instances can't be handled as arguments in pat-lam, but can in lam
-- Recursion can't be done within a lam. Must define a top level name and refer to that
-
-Instance Notes:
-- Recursive calls have to be handled in a helper function, whose type signature
-  is the type of the field in Write.
--}
+-- TODO:
+  -- Get fixity of each constructor and account for that in function body
+  -- Move machinery, etc..., to appropriate (possibly new) modules
+  -- Kill dead code
 
 ------------------------------------------------------------------------
 -- List Char utils
@@ -335,11 +278,8 @@ quoteList : List Term → Term
 quoteList [] = con (quote List.[]) []
 quoteList (x ∷ xs) = con (quote _∷_) (vArg x ∷ [ (vArg (quoteList xs)) ])
 
-padSep : List Char → List Char
-padSep [] = []
-padSep xs@(_ ∷ _) = ' ' ∷ xs ++ [ ' ' ]
-
 -- TODO: probably a better interface/function than this?
+-- This is where the actual function body for each constructor is defined
 telWrite' : List (List Char) → ℕ → Telescope → List Term
 telWrite' seps len [] = [ con (quote List.[]) [] ]
 telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
@@ -355,7 +295,7 @@ telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
             sepSeps = next seps
 
             sep : List Char
-            sep = padSep (proj₁ sepSeps)
+            sep = proj₁ sepSeps
 
             -- there must be a better way! maybe we should use strings
             sepTerm : Term
@@ -416,8 +356,9 @@ conNameTerm nm = def (quote unqualify) (vArg (def (quote toList) (nmLit ∷ []))
 conSeps : List Char → List (List Char)
 conSeps [] = []
 conSeps ('_' ∷ str) = [] ∷ conSeps str
-conSeps str@(_ ∷ _) = wordsBy (_≡?_ '_') str
-
+conSeps str@(_ ∷ _) with wordsBy (_≡?_ '_') str
+... | [] = []
+... | sep ∷ seps = (sep ++ [ ' ' ]) ∷ (map (λ x → ' ' ∷ x ++ [ ' ' ]) seps)
 -- clause for data-types when the constructor is empty
 emptyCons : Name → Clause
 emptyCons nm = Clause.clause (conTel []) ((varPat 0) ∷ conPat ∷ ((varPat 1) ∷ [])) (conNameTerm nm)
@@ -550,27 +491,26 @@ deriveWrite iname typ = (declareWriteInstance iname typ) >> (defineWriteInstance
 syntax deriveWrite x y = y derives Write as x
 
 -- some example usage
-private
-  record Test' (A B : Set) : Set where
-    field
-      a : ℕ
-      b : ℕ
-      c : A
+record Test' (A B : Set) : Set where
+  field
+    a : ℕ
+    b : ℕ
+    c : A
 
-  data Test'' {A : Set} (C : ℕ): Set where
-    a : A → ℕ → Test'' C
+data Test'' {A : Set} (C : ℕ): Set where
+  a : A → ℕ → Test'' C
 
-  instance
-    unquoteDecl Test'Write = (quote Test') derives Write as Test'Write
-    unquoteDecl Test''Write = (quote Test'') derives Write as Test''Write
+instance
+  unquoteDecl Test'Write = (quote Test') derives Write as Test'Write
+  unquoteDecl Test''Write = (quote Test'') derives Write as Test''Write
 
-  test' : Test' ℕ ℕ
-  test' .Test'.a = 5
-  test' .Test'.b = 99
-  test' .Test'.c = 101
+test' : Test' ℕ ℕ
+test' .Test'.a = 5
+test' .Test'.b = 99
+test' .Test'.c = 101
 
-  test'' : Test'' 5
-  test'' = a 0 2
+test'' : Test'' 5
+test'' = a 0 2
 
-  f : String
-  f = write test''
+f : String
+f = write test''
