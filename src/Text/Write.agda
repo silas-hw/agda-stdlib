@@ -15,7 +15,7 @@ open import Data.List.Base using (List; []; [_]; _++_; _∷_)
 open import Data.Maybe.Base using (Maybe; just; nothing)
 open import Data.Nat.Show using () renaming (show to showℕ)
 open import Data.String.Base using (String) public
-open import Data.String.Base using (fromList; toList)
+open import Data.String.Base using (fromList; toList; concat)
 open import Function.Base using (_∘_; const; _$_)
 open import Level using (Level)
 open import Reflection.AST.Fixity using (Precedence; _≤ᵇ_; _≤_) public
@@ -28,16 +28,16 @@ private
 record Write (A : Set a) :  Set a where
   constructor mkWrite
   field
-    writesPrecList :  Precedence → A → List Char → List Char
+    writesPrecList :  Precedence → A → List String → List String
 
-  writePrecList : Precedence → A → List Char
+  writePrecList : Precedence → A → List String
   writePrecList prec x =  writesPrecList prec x []
 
   writesPrec : Precedence → A → String → String
-  writesPrec prec x str = fromList (writesPrecList prec x (toList str))
+  writesPrec prec x str = concat (writesPrecList prec x [ str ])
 
   writePrec : Precedence → A → String
-  writePrec prec x = fromList (writesPrecList prec x [])
+  writePrec prec x = concat (writesPrecList prec x [])
 
   write : A → String
   write = writePrec Precedence.unrelated
@@ -58,5 +58,5 @@ writeSurround lbrac rbrac callerPrec calleePrec str with (calleePrec ≤ᵇ call
 ... | false = str
 ... | true = lbrac ∷ (str ++ [ rbrac ])
 
-writeParens : Precedence → Precedence → List Char → List Char
-writeParens = writeSurround '(' ')'
+writeParens : Precedence → Precedence → List String → List String
+writeParens = writeSurround "(" ")"

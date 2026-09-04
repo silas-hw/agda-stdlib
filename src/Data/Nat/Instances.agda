@@ -9,7 +9,7 @@
 module Data.Nat.Instances where
 
 open import Data.Char using (isDigit)
-open import Data.List.Base using (_++_; spanᵇ)
+open import Data.List.Base using (_∷_; _++_; spanᵇ)
 open import Data.Maybe using (_>>=_; just)
 open import Data.Nat.Base using (ℕ; _≤ᵇ_)
 open import Data.Nat.Properties using (≤-isDecTotalOrder; _≡?_)
@@ -28,7 +28,7 @@ instance
 instance
   open Write
   NatWrite : Write ℕ
-  NatWrite .writesPrecList _ n str = (toList (showℕ n)) ++ str
+  NatWrite .writesPrecList _ n str = showℕ n ∷ str
 
 instance
   open Read {{...}}

@@ -8,7 +8,7 @@
 
 module Data.List.Instances where
 
-open import Data.List.Base using (List; []; _∷_; _++_; foldr; concatMap)
+open import Data.List.Base using (List; []; _∷_; _++_; foldr; concatMap; [_])
 open import Data.List.Effectful
   using (functor; applicative; applicativeZero; alternative; monad
         ; monadZero; monadPlus)
@@ -72,9 +72,9 @@ instance
   ListWrite : {{ Write A }} → Write (List A)
   ListWrite .writesPrecList prec xs str = writeParens prec (related 5.0) (elemsWrite xs) ++ str
     where
-      elemsWrite : {{ Write A }} → List A → List Char
-      elemsWrite [] = toList "[]"
-      elemsWrite (x ∷ xs) = writesPrecList (related 5.0) x (' ' ∷ '∷' ∷ ' ' ∷ elemsWrite xs)
+      elemsWrite : {{ Write A }} → List A → List String
+      elemsWrite [] = [ "[]" ]
+      elemsWrite (x ∷ xs) = writesPrecList (related 5.0) x (" ∷ " ∷ elemsWrite xs)
 
 private
   test[ℕ] : (write (5 ∷ 2 ∷ 12 ∷ 42 ∷ [])) ≡
