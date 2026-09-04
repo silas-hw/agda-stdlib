@@ -11,7 +11,7 @@ module Data.Integer.Instances where
 open import Data.Integer.Base using (ℤ)
 open import Data.Integer.Properties using (_≡?_; ≤-isDecTotalOrder)
 open import Data.Integer.Show using () renaming (show to showℤ)
-open import Data.List.Base using (_++_)
+open import Data.List.Base using (_∷_)
 open import Data.String.Base using (toList)
 open import Relation.Binary.PropositionalEquality.Properties
   using (isDecEquivalence)
@@ -25,4 +25,4 @@ instance
 instance
   open Write
   IntWrite : Write ℤ
-  IntWrite .writesPrecList _ i str = toList (showℤ i) ++ str
+  IntWrite .writesPrecList _ i str = showℤ i ∷ str
