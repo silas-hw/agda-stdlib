@@ -40,7 +40,7 @@ record Write (A : Set a) :  Set a where
   writePrec prec x = concat (writesPrecList prec x [])
 
   write : A → String
-  write = writePrec Precedence.unrelated
+  write = writePrec (Precedence.related 0.0)
 
   writeMaybe : Maybe A → String
   writeMaybe nothing = ""

@@ -34,7 +34,7 @@ open import Reflection.AST.Argument using (vArg; hArg; iArg; unArg)
 open import Reflection.TCM
 open import Reflection.TCM.Effectful using () renaming (monad to monadTCM)
 open import Relation.Binary.PropositionalEquality using (_≡_)
-open import Text.Write using (Write; Char; Precedence)
+open import Text.Write using (Write; Char; Precedence; writeParens)
 open import Level using (Level; suc; zero)
 
 open Clause
@@ -50,9 +50,9 @@ private
   debugOut = debugPrint debugPrefix
 
 -- TODO:
-  -- Get fixity of each constructor and account for that in function body
   -- Move machinery, etc..., to appropriate (possibly new) modules
   -- Kill dead code
+  -- Improve readability
 
 ------------------------------------------------------------------------
 -- List Char utils
@@ -282,15 +282,10 @@ quoteListNoNull (x ∷ xs) y = con (quote _∷_) (vArg x ∷ [ vArg (quoteListNo
 quoteList : List Term → Term
 quoteList xs = quoteListNoNull xs (con (quote List.[]) [])
 
--- TODO: probably a better interface/function than this?
 -- This is where the actual function body for each constructor is defined
-telWrite' : List String → ℕ → Telescope → List Term
-telWrite' seps len [] = []
-telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
-                                       (def (quote writePrec)
-                                       (prec ∷ conVal ∷ [])) ∷
-                                       suff ∷
-                                       (telWrite' seps' len xs)
+telWrite' : Term → List String → ℕ → Telescope → List Term
+telWrite' conPrec seps len [] = []
+telWrite' conPrec seps len ((nm , typ) ∷ xs) = sepTerm ∷ writeVal ∷ (telWrite' conPrec seps' len xs)
           where
             next : List String → String × (List String)
             next [] = " " , []
@@ -302,7 +297,6 @@ telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
             sep : String
             sep = proj₁ sepSeps
 
-            -- there must be a better way! maybe we should use strings
             sepTerm : Term
             sepTerm = lit (string sep)
 
@@ -324,8 +318,8 @@ telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
             conVal : Arg Term
             conVal = vArg $ var ∣ len - (length xs) ∣′ []
 
-            prec : Arg Term
-            prec = vArg $ var 0 []
+            writeVal : Term
+            writeVal = def (quote writePrec) (vArg conPrec ∷ conVal ∷ [])
 
 -- Given a list of mixfix seperators and the telescope of a constructor, produce the
 -- function body for its Write instance.
@@ -333,8 +327,8 @@ telWrite' seps len ((nm , typ) ∷ xs) = sepTerm ∷ pref ∷
 -- In the case the constructor is not mixfix, the seperator list should be a singleton
 -- containing just the constructor name. Each seperator part is interleaved
 -- between written values.
-telWrite : List String → Telescope → Term
-telWrite seps tel = quoteList (telWrite' seps (length tel) tel)
+telWrite : Term → List String → Telescope → Term
+telWrite prec seps tel = def (quote writeParens) (varArg 0 ∷ vArg prec ∷ vArg (quoteList (telWrite' prec seps (length tel) tel)) ∷ [])
 
 varPat : ℕ → Arg Pattern
 varPat n = vArg (Pattern.var n)
@@ -355,9 +349,13 @@ conNameTerm nm = def (quote unqualify) (vArg (def (quote toList) (nmLit ∷ []))
 -- Get a list of constructor seperators
 -- with an additional empty seperator
 -- if the constructor is mixfix and starts with a _
+-- NOTE: there is *very* likely a much nicer way of writing this, but right now
+--       i am too tired to figure it out
 conSeps : List Char → List String
 conSeps [] = []
-conSeps ('_' ∷ str) = " " ∷ conSeps str
+conSeps ('_' ∷ str) with conSeps str
+... | [] = [ "" ]
+... | x ∷ seps = "" ∷ (" " ++s x) ∷ seps
 conSeps str@(_ ∷ _) with wordsBy (_≡?_ '_') str
 ... | [] = []
 ... | sep ∷ seps = (fromList (sep ++ [ ' ' ])) ∷ (map (λ x → fromList (' ' ∷ (sep ++ [ ' ' ]))) seps)
@@ -369,10 +367,17 @@ emptyCons nm = Clause.clause (conTel []) ((varPat 0) ∷ conPat ∷ ((varPat 1) 
     conPat : Arg Pattern
     conPat = vArg (Pattern.con nm [])
 
+nmPrec : Name → Precedence
+nmPrec nm with getFixity nm
+... | fixity _ prec = prec
+
 -- derive the clause for a single constructor of a data-type
-consClause : Name → Telescope → Clause
-consClause nm [] = emptyCons nm
-consClause nm tel@(_ ∷ _) = Clause.clause (conTel tel) (varPat 0 ∷ conPat ∷ strPat ∷ []) writeTerm
+consClause : Name → Telescope → TC Clause
+consClause nm [] = pure $ emptyCons nm
+consClause nm tel@(_ ∷ _) = do
+  prec ← quoteTC (nmPrec nm)
+  let writeTerm = telWrite prec (conSeps nmStr) tel
+  pure $ Clause.clause (conTel tel) (varPat 0 ∷ conPat ∷ strPat ∷ []) writeTerm
   where
     precPat : Arg Pattern
     precPat = varPat 0
@@ -389,16 +394,14 @@ consClause nm tel@(_ ∷ _) = Clause.clause (conTel tel) (varPat 0 ∷ conPat �
     nmStr : List Char
     nmStr = unqualify (toList (showName nm))
 
-    writeTerm : Term
-    writeTerm = telWrite (conSeps nmStr) tel
-
 -- Output a list of terms that each produce part of the output
 -- for a record-type
+-- TODO: handle bracketing? (when would the record need to be bracketed?)
 recordOutputs : Name → List (Arg Name) → List Term
 recordOutputs nm [] = lit (string "}") ∷ []
 recordOutputs nm (x ∷ fs) = lit (string fieldName) ∷
                             lit (string " = ") ∷
-                            def (quote writePrec) (varArg 0 ∷ fieldArg ∷ []) ∷
+                            def (quote write) (fieldArg ∷ []) ∷
                             lit (string "; ") ∷
                             recordOutputs nm fs
   where
@@ -411,12 +414,13 @@ recordOutputs nm (x ∷ fs) = lit (string fieldName) ∷
 -- Produce the term for the derived Write instance for record-types
 recordTerm : Name → List (Arg Name) → Term
 recordTerm nm fs = quoteListNoNull (prefix ∷ outs) (var 2 [])
-           where
-             prefix : Term
-             prefix = lit (string "record {")
 
-             outs : List Term
-             outs = recordOutputs nm fs
+  where
+    prefix : Term
+    prefix = lit (string "record { ")
+
+    outs : List Term
+    outs = recordOutputs nm fs
 
 weakenPi : ℕ → Type → Type
 weakenPi ℕ.zero t = t
@@ -428,6 +432,13 @@ piCount : Type → ℕ
 piCount (pi c (abs s x)) = ℕ.suc (piCount x)
 {-# CATCHALL #-}
 piCount _ = 0
+
+consClauses : List (Name × Telescope) → TC (List Clause)
+consClauses [] = pure $ []
+consClauses ((nm , tel) ∷ nmts) = do
+  tl ← consClauses nmts
+  hd ← consClause nm tel
+  pure $ hd ∷ tl
 
 -- derive the body of the auxiliary function of a Write instance
 computeAuxWrite : Name → Definition → TC (List Clause)
@@ -443,7 +454,7 @@ computeAuxWrite nm (record-type c fs) = do
 computeAuxWrite nm (data-type p cs) = do
   ts ← mapM monadTCM getType cs
   let tels = map (drop p ∘ proj₁ ∘ telView) ts
-  let clauses = (Data.List.Base.map (uncurry consClause) (zip cs tels))
+  clauses ← consClauses (zip cs tels)
   debugOut 0 (termErr (pat-lam clauses []) ∷ [])
   pure clauses
 {-# CATCHALL #-}
@@ -501,9 +512,13 @@ record Test' (A B : Set) : Set where
     b : ℕ
     c : A
 
+infix 20 _a_
 data Test'' {A : Set} (C : ℕ): Set where
-  a : A → ℕ → Test'' C
+  _a_ : A → List ℕ → Test'' C
 
+-- infix 20 Test''._a_
+
+open import Data.List.Instances
 instance
   unquoteDecl Test'Write = (quote Test') derives Write as Test'Write
   unquoteDecl Test''Write = (quote Test'') derives Write as Test''Write
@@ -514,7 +529,7 @@ test' .Test'.b = 99
 test' .Test'.c = 101
 
 test'' : Test'' 5
-test'' = a 0 2
+test'' = 0 a (1 ∷ 2 ∷ 3 ∷ [])
 
 f : String
 f = write test''
